@@ -7,14 +7,19 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
   :root {
-    --bg: #14161a;
-    --panel: #1d2026;
-    --panel2: #23272f;
-    --border: #33383f;
-    --text: #e8eaed;
-    --muted: #9aa0a8;
-    --accent: #4dd2ff;
-    --accent-dim: #2a7d99;
+    --bg: #eef2f8;
+    --card: #ffffff;
+    --card2: #f5f8fc;
+    --border: #dfe6ef;
+    --text: #273444;
+    --muted: #8492a6;
+    --primary: #3b82f6;
+    --primary-bg: #eaf2fe;
+    --primary-dark: #2563eb;
+    --pink: #f06ba8;
+    --check-a: #e9edf4;
+    --check-b: #fbfcfe;
+    --shadow: 0 2px 10px rgba(50, 70, 120, .07);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -22,28 +27,50 @@
     color: var(--text);
     font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
     min-height: 100vh;
-    padding: 20px;
+    padding: 18px;
+    max-width: 1560px;
+    margin: 0 auto;
   }
-  header { margin-bottom: 18px; }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 14px 20px;
+    margin-bottom: 16px;
+  }
+  header .logo {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    padding: 4px;
+    background: var(--card);
+  }
   header h1 {
-    font-size: 22px;
-    letter-spacing: 0.04em;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
   }
-  header h1 span { color: var(--accent); }
-  header p { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  header h1 span { color: var(--primary); }
+  header p { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 
   #dropzone {
-    border: 2px dashed var(--border);
-    border-radius: 12px;
-    padding: 36px 20px;
+    background: var(--card);
+    border: 2px dashed #b9d0f2;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 34px 20px;
     text-align: center;
     color: var(--muted);
     cursor: pointer;
     transition: border-color .15s, background .15s;
     margin-bottom: 16px;
   }
-  #dropzone.dragover { border-color: var(--accent); background: rgba(77,210,255,.06); }
-  #dropzone strong { color: var(--text); font-weight: 600; }
+  #dropzone:hover, #dropzone.dragover { border-color: var(--primary); background: var(--primary-bg); }
+  #dropzone strong { color: var(--text); font-weight: 700; font-size: 15px; }
   #dropzone .sub { font-size: 12px; margin-top: 6px; }
   #fileInput { display: none; }
 
@@ -52,17 +79,32 @@
   .side-pane { flex: 0 1 360px; min-width: 300px; display: flex; flex-direction: column; gap: 16px; }
 
   .panel {
-    background: var(--panel);
+    background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 18px;
   }
   .panel h2 {
-    font-size: 13px;
-    color: var(--muted);
-    font-weight: 600;
-    letter-spacing: .08em;
-    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text);
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+  .step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 21px; height: 21px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
   }
 
   #previewWrap { text-align: center; }
@@ -70,48 +112,49 @@
   #previewGrid.active { display: flex; }
   .pv-box { flex: 1; min-width: 0; }
   .pv-label {
-    font-size: 11.5px;
-    color: var(--muted);
-    font-weight: 600;
-    letter-spacing: .06em;
-    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 700;
+    margin-bottom: 8px;
   }
   #previewCanvas {
     max-width: 100%;
     max-height: 68vh;
-    border-radius: 6px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
     cursor: pointer;
   }
-  #layerPanel { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  #layerPanel { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
   .layer-row {
     display: flex; align-items: center; gap: 7px;
-    background: var(--panel2);
+    background: var(--card2);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 5px 8px;
+    border-radius: 10px;
+    padding: 7px 10px;
     font-size: 11.5px;
   }
-  .layer-row input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
-  .layer-row .lname { flex: 1; white-space: nowrap; }
-  .layer-row.off .lname { color: var(--muted); }
-  .layer-row input[type="range"] { width: 60px; accent-color: var(--accent); }
+  .layer-row input[type="checkbox"] { accent-color: var(--primary); margin: 0; }
+  .layer-row .lname { flex: 1; white-space: nowrap; font-weight: 600; }
+  .layer-row.off .lname { color: var(--muted); font-weight: 400; }
+  .layer-row input[type="range"] { width: 60px; accent-color: var(--primary); }
   .layer-row .lop { width: 34px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
   .layer-btn {
-    background: none;
+    background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     color: var(--muted);
     cursor: pointer;
     font-size: 10px;
-    padding: 2px 6px;
+    padding: 3px 7px;
     line-height: 1.2;
   }
-  .layer-btn:disabled { opacity: .3; cursor: default; }
-  .layer-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+  .layer-btn:disabled { opacity: .35; cursor: default; }
+  .layer-btn:hover:not(:disabled) { color: var(--primary); border-color: var(--primary); background: var(--primary-bg); }
   #previewResult { display: flex; flex-direction: column; gap: 4px; align-items: center; }
   #previewResult .pv-item {
-    background: repeating-conic-gradient(#3a3f47 0% 25%, #2b2f36 0% 50%) 0 0 / 16px 16px;
-    border-radius: 6px;
+    background: repeating-conic-gradient(var(--check-a) 0% 25%, var(--check-b) 0% 50%) 0 0 / 16px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
     overflow: hidden;
     max-width: 100%;
     line-height: 0;
@@ -119,63 +162,67 @@
   #previewResult .pv-item canvas { max-width: 100%; max-height: 40vh; }
   .pv-cap { font-size: 11px; color: var(--muted); margin-bottom: 8px; text-align: center; }
   #previewEmpty { color: var(--muted); font-size: 13px; padding: 60px 0; }
-  #imgInfo { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  #imgInfo { color: var(--muted); font-size: 12px; margin-top: 10px; }
   .hint { color: var(--muted); font-size: 11.5px; margin-top: 8px; line-height: 1.6; }
 
-  .control-row { margin-bottom: 14px; }
+  .control-row { margin-bottom: 16px; }
   .control-row:last-child { margin-bottom: 0; }
   .control-row label {
     display: flex; justify-content: space-between;
-    font-size: 13px; margin-bottom: 6px;
+    font-size: 13px; font-weight: 600; margin-bottom: 6px;
   }
-  .control-row label .val { color: var(--accent); font-variant-numeric: tabular-nums; }
-  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .control-row label .val { color: var(--primary); font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; accent-color: var(--primary); }
   input[type="number"] {
     width: 90px;
-    background: var(--panel2);
+    background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 8px;
     color: var(--text);
-    padding: 6px 8px;
+    padding: 7px 9px;
     font-size: 13px;
   }
+  input[type="number"]:focus, input[type="range"]:focus-visible { outline: 2px solid var(--primary-bg); border-color: var(--primary); }
 
   .mode-toggle { display: flex; gap: 8px; }
   .mode-toggle button {
     flex: 1;
-    background: var(--panel2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
     color: var(--muted);
-    padding: 9px 6px;
+    padding: 10px 6px;
     font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
     transition: all .12s;
   }
+  .mode-toggle button:hover { border-color: #b9d0f2; }
   .mode-toggle button.active {
-    background: rgba(77,210,255,.12);
-    border-color: var(--accent);
-    color: var(--accent);
-    font-weight: 600;
+    background: var(--primary-bg);
+    border-color: var(--primary);
+    color: var(--primary-dark);
+    font-weight: 700;
   }
 
-  #objectCount { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  #objectCount { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
   #objectCount b { color: var(--text); }
 
-  #results { display: flex; flex-direction: column; gap: 12px; }
+  #results { display: flex; flex-direction: column; gap: 10px; }
   .result-item {
     display: flex; gap: 12px; align-items: center;
-    background: var(--panel2);
+    background: var(--card2);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 10px;
   }
   .result-item .thumb {
     width: 92px; height: 92px;
     display: flex; align-items: center; justify-content: center;
     background:
-      repeating-conic-gradient(#3a3f47 0% 25%, #2b2f36 0% 50%) 0 0 / 16px 16px;
-    border-radius: 6px;
+      repeating-conic-gradient(var(--check-a) 0% 25%, var(--check-b) 0% 50%) 0 0 / 16px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
     overflow: hidden;
     flex-shrink: 0;
   }
@@ -189,44 +236,49 @@
   .result-item .tag {
     display: inline-block;
     font-size: 10.5px;
-    border-radius: 4px;
-    padding: 1px 6px;
-    margin-bottom: 4px;
-    color: #14161a;
-    font-weight: 600;
+    border-radius: 20px;
+    padding: 2px 9px;
+    margin-bottom: 5px;
+    color: #fff;
+    font-weight: 700;
   }
   .dl-btn {
-    background: var(--accent);
+    background: var(--primary);
     border: none;
-    border-radius: 8px;
-    color: #10222b;
+    border-radius: 10px;
+    color: #fff;
     font-weight: 700;
     font-size: 12.5px;
-    padding: 9px 14px;
+    padding: 10px 16px;
     cursor: pointer;
     flex-shrink: 0;
+    transition: background .12s;
   }
-  .dl-btn:hover { filter: brightness(1.1); }
+  .dl-btn:hover { background: var(--primary-dark); }
   #dlAllBtn {
     width: 100%;
-    margin-top: 4px;
-    background: transparent;
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    border-radius: 8px;
-    padding: 10px;
+    margin-top: 6px;
+    background: var(--pink);
+    border: none;
+    color: #fff;
+    border-radius: 10px;
+    padding: 11px;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
     cursor: pointer;
+    transition: filter .12s;
   }
-  #dlAllBtn:hover { background: rgba(77,210,255,.1); }
+  #dlAllBtn:hover { filter: brightness(.94); }
   #resultsEmpty { color: var(--muted); font-size: 12.5px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Out<span>Liner</span></h1>
-  <p>PNGの透明部分を切り取り、オブジェクトをアウトラインで切り出すツール（完全ローカル処理）</p>
+  <img src="favicon.svg" alt="" class="logo">
+  <div>
+    <h1>Out<span>Liner</span></h1>
+    <p>PNGの透明部分を切り取り、オブジェクトをアウトラインで切り出すツール（完全ローカル処理）</p>
+  </div>
 </header>
 
 <div id="dropzone">
@@ -260,7 +312,7 @@
 
   <div class="side-pane">
     <div class="panel">
-      <h2>切り出しモード</h2>
+      <h2><span class="step">1</span>切り出しモード</h2>
       <div class="mode-toggle">
         <button id="modeWhole" class="active">全体トリミング</button>
         <button id="modeEach">個別切り出し</button>
@@ -269,7 +321,7 @@
     </div>
 
     <div class="panel">
-      <h2>出力タイプ</h2>
+      <h2><span class="step">2</span>出力タイプ</h2>
       <div class="mode-toggle">
         <button id="typeColor" class="active">カラーPNG</button>
         <button id="typeWhite">白版PNG</button>
@@ -289,7 +341,7 @@
     </div>
 
     <div class="panel">
-      <h2>調整</h2>
+      <h2><span class="step">3</span>調整</h2>
       <div class="control-row">
         <label>アルファ閾値 <span class="val" id="thVal">0</span></label>
         <input type="range" id="threshold" min="0" max="254" value="0">
@@ -302,7 +354,7 @@
     </div>
 
     <div class="panel">
-      <h2>切り出し結果</h2>
+      <h2><span class="step">4</span>切り出し結果</h2>
       <div id="results"><div id="resultsEmpty">画像を読み込んでください</div></div>
     </div>
   </div>
@@ -335,7 +387,7 @@ const state = {
 const LAYER_NAMES = { color: "カラーPNG", white: "白版PNG", outline: "輪郭SVG" };
 const MIN_AREA = 4; // これ未満の連結成分はノイズとして無視
 
-const PALETTE = ["#4dd2ff","#ffb347","#7cfc90","#ff6ec7","#c39bff","#ffe14d","#ff7a5c","#6affd8"];
+const PALETTE = ["#3b82f6","#f59e0b","#22c55e","#ec4899","#8b5cf6","#0ea5e9","#f97316","#14b8a6"];
 
 const $ = id => document.getElementById(id);
 const previewCanvas = $("previewCanvas");
@@ -452,9 +504,9 @@ function renderPreview() {
   const pat = document.createElement("canvas");
   pat.width = pat.height = cell * 2;
   const pctx = pat.getContext("2d");
-  pctx.fillStyle = "#2b2f36";
+  pctx.fillStyle = "#fbfcfe";
   pctx.fillRect(0, 0, cell * 2, cell * 2);
-  pctx.fillStyle = "#3a3f47";
+  pctx.fillStyle = "#e9edf4";
   pctx.fillRect(0, 0, cell, cell);
   pctx.fillRect(cell, cell, cell, cell);
   ctx.fillStyle = ctx.createPattern(pat, "repeat");
@@ -485,7 +537,7 @@ function renderPreview() {
     const tw = ctx.measureText(tag).width;
     ctx.fillStyle = sel ? color : "rgba(150,150,150,.55)";
     ctx.fillRect(o.minX - .5, o.minY - .5, tw + lw * 8, Math.max(14, Math.round(w / 50)));
-    ctx.fillStyle = "#14161a";
+    ctx.fillStyle = "#ffffff";
     ctx.fillText(tag, o.minX + lw * 4 - .5, o.minY + lw);
   });
 }
@@ -764,7 +816,7 @@ function loopsToCanvas(loops, ow, oh) {
   const c = document.createElement("canvas");
   c.width = ow; c.height = oh;
   const ctx = c.getContext("2d");
-  ctx.strokeStyle = "#ff4d4d";
+  ctx.strokeStyle = "#ef4444";
   ctx.lineWidth = Math.max(1, Math.round(ow / 200));
   loops.forEach(loop => {
     ctx.beginPath();
@@ -806,7 +858,7 @@ function renderResults() {
       maskLabel: null,
       baseName: `${state.fileName}_trimmed`,
       tagText: "全体トリミング",
-      tagColor: "#4dd2ff",
+      tagColor: "#3b82f6",
     });
   } else {
     sel.forEach(o => {
@@ -836,7 +888,7 @@ function renderResults() {
       const c = whiteCanvas(t.rect, t.labelSet);
       items.push({
         canvas: c, name: `${t.baseName}_white.png`,
-        tagText: `${t.tagText}・白版`, tagColor: "#ffffff",
+        tagText: `${t.tagText}・白版`, tagColor: "#94a3b8",
         save: name => downloadCanvas(c, name),
       });
     } else {
@@ -844,7 +896,7 @@ function renderResults() {
       const svg = loopsToSvg(loops, ow, oh);
       items.push({
         canvas: loopsToCanvas(loops, ow, oh), name: `${t.baseName}_outline.svg`,
-        tagText: `${t.tagText}・輪郭`, tagColor: "#ff4d4d",
+        tagText: `${t.tagText}・輪郭`, tagColor: "#ef4444",
         save: name => downloadText(svg, name, "image/svg+xml"),
       });
     }
