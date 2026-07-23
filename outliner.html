@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OutLiner — PNG アルファ切り出しツール</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1d2026;
+    --panel2: #23272f;
+    --border: #33383f;
+    --text: #e8eaed;
+    --muted: #9aa0a8;
+    --accent: #4dd2ff;
+    --accent-dim: #2a7d99;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  header { margin-bottom: 18px; }
+  header h1 {
+    font-size: 22px;
+    letter-spacing: 0.04em;
+  }
+  header h1 span { color: var(--accent); }
+  header p { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 36px 20px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    margin-bottom: 16px;
+  }
+  #dropzone.dragover { border-color: var(--accent); background: rgba(77,210,255,.06); }
+  #dropzone strong { color: var(--text); font-weight: 600; }
+  #dropzone .sub { font-size: 12px; margin-top: 6px; }
+  #fileInput { display: none; }
+
+  .layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .preview-pane { flex: 1 1 480px; min-width: 320px; }
+  .side-pane { flex: 0 1 360px; min-width: 300px; display: flex; flex-direction: column; gap: 16px; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: .08em;
+    margin-bottom: 12px;
+  }
+
+  #previewWrap { text-align: center; }
+  #previewGrid { display: none; gap: 16px; text-align: left; }
+  #previewGrid.active { display: flex; }
+  .pv-box { flex: 1; min-width: 0; }
+  .pv-label {
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: .06em;
+    margin-bottom: 6px;
+  }
+  #previewCanvas {
+    max-width: 100%;
+    max-height: 68vh;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #layerPanel { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .layer-row {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 11.5px;
+  }
+  .layer-row input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
+  .layer-row .lname { flex: 1; white-space: nowrap; }
+  .layer-row.off .lname { color: var(--muted); }
+  .layer-row input[type="range"] { width: 60px; accent-color: var(--accent); }
+  .layer-row .lop { width: 34px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .layer-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px 6px;
+    line-height: 1.2;
+  }
+  .layer-btn:disabled { opacity: .3; cursor: default; }
+  .layer-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+  #previewResult { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  #previewResult .pv-item {
+    background: repeating-conic-gradient(#3a3f47 0% 25%, #2b2f36 0% 50%) 0 0 / 16px 16px;
+    border-radius: 6px;
+    overflow: hidden;
+    max-width: 100%;
+    line-height: 0;
+  }
+  #previewResult .pv-item canvas { max-width: 100%; max-height: 40vh; }
+  .pv-cap { font-size: 11px; color: var(--muted); margin-bottom: 8px; text-align: center; }
+  #previewEmpty { color: var(--muted); font-size: 13px; padding: 60px 0; }
+  #imgInfo { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .hint { color: var(--muted); font-size: 11.5px; margin-top: 8px; line-height: 1.6; }
+
+  .control-row { margin-bottom: 14px; }
+  .control-row:last-child { margin-bottom: 0; }
+  .control-row label {
+    display: flex; justify-content: space-between;
+    font-size: 13px; margin-bottom: 6px;
+  }
+  .control-row label .val { color: var(--accent); font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  input[type="number"] {
+    width: 90px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+
+  .mode-toggle { display: flex; gap: 8px; }
+  .mode-toggle button {
+    flex: 1;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    padding: 9px 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .mode-toggle button.active {
+    background: rgba(77,210,255,.12);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  #objectCount { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  #objectCount b { color: var(--text); }
+
+  #results { display: flex; flex-direction: column; gap: 12px; }
+  .result-item {
+    display: flex; gap: 12px; align-items: center;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+  }
+  .result-item .thumb {
+    width: 92px; height: 92px;
+    display: flex; align-items: center; justify-content: center;
+    background:
+      repeating-conic-gradient(#3a3f47 0% 25%, #2b2f36 0% 50%) 0 0 / 16px 16px;
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .result-item .thumb canvas { max-width: 88px; max-height: 88px; }
+  .result-item .meta { flex: 1; min-width: 0; }
+  .result-item .meta .name {
+    font-size: 12.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .result-item .meta .dim { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .result-item .tag {
+    display: inline-block;
+    font-size: 10.5px;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-bottom: 4px;
+    color: #14161a;
+    font-weight: 600;
+  }
+  .dl-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: #10222b;
+    font-weight: 700;
+    font-size: 12.5px;
+    padding: 9px 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .dl-btn:hover { filter: brightness(1.1); }
+  #dlAllBtn {
+    width: 100%;
+    margin-top: 4px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #dlAllBtn:hover { background: rgba(77,210,255,.1); }
+  #resultsEmpty { color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Out<span>Liner</span></h1>
+  <p>PNGの透明部分を切り取り、オブジェクトをアウトラインで切り出すツール（完全ローカル処理）</p>
+</header>
+
+<div id="dropzone">
+  <strong>PNGファイルをここにドラッグ＆ドロップ</strong>（またはクリックして選択）
+  <div class="sub">アルファチャンネル付きPNG／1枚ずつ処理</div>
+</div>
+<input type="file" id="fileInput" accept="image/png">
+
+<div class="layout">
+  <div class="preview-pane panel">
+    <h2>プレビュー</h2>
+    <div id="previewWrap">
+      <div id="previewGrid">
+        <div class="pv-box">
+          <div class="pv-label">元画像</div>
+          <canvas id="previewCanvas"></canvas>
+        </div>
+        <div class="pv-box">
+          <div class="pv-label">切り出し結果（レイヤー合成）</div>
+          <div id="layerPanel"></div>
+          <div id="previewResult"></div>
+        </div>
+      </div>
+      <div id="previewEmpty">画像を読み込むと、検出したオブジェクトの輪郭が表示されます</div>
+    </div>
+    <div id="imgInfo"></div>
+    <div class="hint" id="previewHint" style="display:none">
+      オブジェクトをクリックすると選択／解除を切り替えられます。選択中のオブジェクトだけが切り出し対象になります。
+    </div>
+  </div>
+
+  <div class="side-pane">
+    <div class="panel">
+      <h2>切り出しモード</h2>
+      <div class="mode-toggle">
+        <button id="modeWhole" class="active">全体トリミング</button>
+        <button id="modeEach">個別切り出し</button>
+      </div>
+      <div id="objectCount"></div>
+    </div>
+
+    <div class="panel">
+      <h2>出力タイプ</h2>
+      <div class="mode-toggle">
+        <button id="typeColor" class="active">カラーPNG</button>
+        <button id="typeWhite">白版PNG</button>
+        <button id="typeOutline">輪郭SVG</button>
+      </div>
+      <div class="hint" id="typeHint">通常の切り出し画像（透明背景つきPNG）</div>
+      <div class="control-row" id="whiteShrinkRow" style="display:none; margin-top:12px;">
+        <label for="whiteShrink">白版の収縮／拡張（px）</label>
+        <input type="number" id="whiteShrink" min="-50" max="50" value="0">
+        <div class="hint">プラス＝チョーク（輪郭より小さく／白のはみ出し防止）、マイナス＝スプレッド（輪郭より大きく／下地の白をはみ出させる）。拡張時はその分だけ切り出し範囲が全出力タイプ共通で自動的に広がるため、白版がはみ出して欠けることはありません。</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>調整</h2>
+      <div class="control-row">
+        <label>アルファ閾値 <span class="val" id="thVal">0</span></label>
+        <input type="range" id="threshold" min="0" max="254" value="0">
+        <div class="hint">この値以下のアルファ値のピクセルは背景とみなします。うっすら残るゴミの除去に上げてください。</div>
+      </div>
+      <div class="control-row">
+        <label for="padding">余白パディング（px）</label>
+        <input type="number" id="padding" min="0" max="500" value="0">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>切り出し結果</h2>
+      <div id="results"><div id="resultsEmpty">画像を読み込んでください</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- 状態 ----------
+const state = {
+  fileName: null,   // 拡張子なしの元ファイル名
+  imageData: null,  // 元画像の ImageData
+  labels: null,     // Int32Array 連結成分ラベルマップ（0 = 背景）
+  objects: [],      // {label, minX, minY, maxX, maxY, area}
+  selected: new Set(),
+  threshold: 0,
+  padding: 0,
+  mode: "whole",       // "whole" | "each"
+  outputType: "color", // "color" | "white" | "outline"
+  whiteShrink: 0,      // 白版の調整量（px）: プラス=チョーク / マイナス=スプレッド
+  targets: [],         // 現在の切り出し対象（renderResults で更新）
+  // プレビュー合成レイヤー。配列の先頭 = 最前面。visible と opacity は個別に調整可
+  layers: [
+    { key: "outline", visible: false, opacity: 1 },
+    { key: "white", visible: false, opacity: 0.5 },
+    { key: "color", visible: true, opacity: 1 },
+  ],
+};
+const LAYER_NAMES = { color: "カラーPNG", white: "白版PNG", outline: "輪郭SVG" };
+const MIN_AREA = 4; // これ未満の連結成分はノイズとして無視
+
+const PALETTE = ["#4dd2ff","#ffb347","#7cfc90","#ff6ec7","#c39bff","#ffe14d","#ff7a5c","#6affd8"];
+
+const $ = id => document.getElementById(id);
+const previewCanvas = $("previewCanvas");
+
+// ---------- 読み込み ----------
+const dropzone = $("dropzone");
+const fileInput = $("fileInput");
+dropzone.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+["dragover", "dragenter"].forEach(ev => dropzone.addEventListener(ev, e => {
+  e.preventDefault(); dropzone.classList.add("dragover");
+}));
+["dragleave", "drop"].forEach(ev => dropzone.addEventListener(ev, e => {
+  e.preventDefault(); dropzone.classList.remove("dragover");
+}));
+dropzone.addEventListener("drop", e => {
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+// ページ全体へのドロップで画像が開かれるのを防止
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => e.preventDefault());
+
+function loadFile(file) {
+  if (file.type !== "image/png") {
+    alert("PNGファイルを選択してください");
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const off = document.createElement("canvas");
+    off.width = img.naturalWidth;
+    off.height = img.naturalHeight;
+    const ctx = off.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    state.imageData = ctx.getImageData(0, 0, off.width, off.height);
+    state.fileName = file.name.replace(/\.png$/i, "");
+    recompute();
+  };
+  img.onerror = () => alert("画像の読み込みに失敗しました");
+  img.src = url;
+}
+
+// ---------- オブジェクト検出（連結成分ラベリング / 8近傍 flood fill） ----------
+function detectObjects() {
+  const { width: w, height: h, data } = state.imageData;
+  const th = state.threshold;
+  const labels = new Int32Array(w * h);
+  const comps = [];
+  const stack = new Int32Array(w * h); // 反復flood fill用スタック（再帰不可: 大画像でオーバーフローする）
+  let nextLabel = 1;
+
+  for (let i = 0; i < w * h; i++) {
+    if (labels[i] !== 0 || data[i * 4 + 3] <= th) continue;
+    const label = nextLabel++;
+    let sp = 0;
+    stack[sp++] = i;
+    labels[i] = label;
+    let minX = w, minY = h, maxX = 0, maxY = 0, area = 0;
+    while (sp > 0) {
+      const p = stack[--sp];
+      const x = p % w, y = (p / w) | 0;
+      area++;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= h) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = x + dx;
+          if (nx < 0 || nx >= w) continue;
+          const np = ny * w + nx;
+          if (labels[np] === 0 && data[np * 4 + 3] > th) {
+            labels[np] = label;
+            stack[sp++] = np;
+          }
+        }
+      }
+    }
+    comps.push({ label, minX, minY, maxX, maxY, area });
+  }
+
+  state.labels = labels;
+  state.objects = comps.filter(c => c.area >= MIN_AREA);
+  state.selected = new Set(state.objects.map(o => o.label));
+}
+
+function recompute() {
+  detectObjects();
+  renderPreview();
+  renderResults();
+  updateInfo();
+}
+
+// ---------- プレビュー描画 ----------
+function renderPreview() {
+  if (!state.imageData) return;
+  const { width: w, height: h } = state.imageData;
+  previewCanvas.width = w;
+  previewCanvas.height = h;
+  $("previewGrid").classList.add("active");
+  $("previewEmpty").style.display = "none";
+  $("previewHint").style.display = "block";
+
+  const ctx = previewCanvas.getContext("2d");
+
+  // 市松模様（透明部分の表現）
+  const cell = Math.max(8, Math.round(w / 48));
+  const pat = document.createElement("canvas");
+  pat.width = pat.height = cell * 2;
+  const pctx = pat.getContext("2d");
+  pctx.fillStyle = "#2b2f36";
+  pctx.fillRect(0, 0, cell * 2, cell * 2);
+  pctx.fillStyle = "#3a3f47";
+  pctx.fillRect(0, 0, cell, cell);
+  pctx.fillRect(cell, cell, cell, cell);
+  ctx.fillStyle = ctx.createPattern(pat, "repeat");
+  ctx.fillRect(0, 0, w, h);
+
+  // 元画像
+  const off = document.createElement("canvas");
+  off.width = w; off.height = h;
+  off.getContext("2d").putImageData(state.imageData, 0, 0);
+  ctx.drawImage(off, 0, 0);
+
+  // 輪郭線オーバーレイ（マスクのエッジピクセルを着色）
+  ctx.drawImage(buildEdgeOverlay(), 0, 0);
+
+  // バウンディングボックス
+  const lw = Math.max(1, Math.round(w / 400));
+  ctx.font = `${Math.max(11, Math.round(w / 55))}px sans-serif`;
+  ctx.textBaseline = "top";
+  state.objects.forEach((o, i) => {
+    const sel = state.selected.has(o.label);
+    const color = PALETTE[i % PALETTE.length];
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = sel ? color : "rgba(150,150,150,.55)";
+    ctx.setLineDash(sel ? [] : [lw * 4, lw * 3]);
+    ctx.strokeRect(o.minX - .5, o.minY - .5, o.maxX - o.minX + 1, o.maxY - o.minY + 1);
+    ctx.setLineDash([]);
+    const tag = `${i + 1}`;
+    const tw = ctx.measureText(tag).width;
+    ctx.fillStyle = sel ? color : "rgba(150,150,150,.55)";
+    ctx.fillRect(o.minX - .5, o.minY - .5, tw + lw * 8, Math.max(14, Math.round(w / 50)));
+    ctx.fillStyle = "#14161a";
+    ctx.fillText(tag, o.minX + lw * 4 - .5, o.minY + lw);
+  });
+}
+
+function buildEdgeOverlay() {
+  const { width: w, height: h } = state.imageData;
+  const labels = state.labels;
+  const objIndex = new Map(state.objects.map((o, i) => [o.label, i]));
+  const od = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      const L = labels[p];
+      if (L === 0 || !objIndex.has(L)) continue;
+      // 4近傍に別ラベル（または画像端）があればエッジ
+      const isEdge =
+        x === 0 || labels[p - 1] !== L ||
+        x === w - 1 || labels[p + 1] !== L ||
+        y === 0 || labels[p - w] !== L ||
+        y === h - 1 || labels[p + w] !== L;
+      if (!isEdge) continue;
+      const i = objIndex.get(L);
+      const sel = state.selected.has(L);
+      const hex = sel ? PALETTE[i % PALETTE.length] : "#969696";
+      od[p * 4] = parseInt(hex.slice(1, 3), 16);
+      od[p * 4 + 1] = parseInt(hex.slice(3, 5), 16);
+      od[p * 4 + 2] = parseInt(hex.slice(5, 7), 16);
+      od[p * 4 + 3] = sel ? 230 : 140;
+    }
+  }
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").putImageData(new ImageData(od, w, h), 0, 0);
+  return c;
+}
+
+// クリックで選択トグル
+previewCanvas.addEventListener("click", e => {
+  if (!state.labels) return;
+  const rect = previewCanvas.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) / rect.width * previewCanvas.width);
+  const y = Math.floor((e.clientY - rect.top) / rect.height * previewCanvas.height);
+  const { width: w, height: h } = state.imageData;
+  if (x < 0 || x >= w || y < 0 || y >= h) return;
+  // クリック位置のラベル。背景クリック時はバウンディングボックス内のオブジェクトを探す
+  let label = state.labels[y * w + x];
+  if (label === 0 || !state.objects.some(o => o.label === label)) {
+    const hit = state.objects.find(o => x >= o.minX && x <= o.maxX && y >= o.minY && y <= o.maxY);
+    if (!hit) return;
+    label = hit.label;
+  }
+  if (state.selected.has(label)) state.selected.delete(label);
+  else state.selected.add(label);
+  renderPreview();
+  renderResults();
+  updateInfo();
+});
+
+// ---------- 切り出し ----------
+// rect + パディングのキャンバスを作る。maskLabel 指定時は他オブジェクトのピクセルを透明化
+function extract(rect, maskLabel) {
+  const { width: w, data } = state.imageData;
+  const labels = state.labels;
+  const pad = effectivePad();
+  const rw = rect.maxX - rect.minX + 1;
+  const rh = rect.maxY - rect.minY + 1;
+  const out = new Uint8ClampedArray((rw + pad * 2) * (rh + pad * 2) * 4);
+  const ow = rw + pad * 2;
+  for (let y = 0; y < rh; y++) {
+    for (let x = 0; x < rw; x++) {
+      const sp = (rect.minY + y) * w + (rect.minX + x);
+      if (maskLabel !== null) {
+        const L = labels[sp];
+        // 自オブジェクトと背景（閾値以下のソフトなフリンジ）は残し、他オブジェクトのピクセルは除去
+        if (L !== 0 && L !== maskLabel) continue;
+      }
+      const dp = (y + pad) * ow + (x + pad);
+      out[dp * 4] = data[sp * 4];
+      out[dp * 4 + 1] = data[sp * 4 + 1];
+      out[dp * 4 + 2] = data[sp * 4 + 2];
+      out[dp * 4 + 3] = data[sp * 4 + 3];
+    }
+  }
+  const c = document.createElement("canvas");
+  c.width = ow;
+  c.height = rh + pad * 2;
+  c.getContext("2d").putImageData(new ImageData(out, ow, rh + pad * 2), 0, 0);
+  return c;
+}
+
+function selectedObjects() {
+  return state.objects.filter(o => state.selected.has(o.label));
+}
+
+// 実効パディング: 白版をスプレッド（拡張）する場合は、はみ出さないよう
+// その分だけ切り出し範囲を自動で広げる。全出力タイプ共通で使うことで
+// カラー・白版・輪郭のキャンバスサイズが常に一致し、重ね合わせがズレない
+function effectivePad() {
+  return state.padding + Math.max(0, -state.whiteShrink);
+}
+
+// ---------- マスク・白版・輪郭 ----------
+// rect + パディングの領域について、labelSet に含まれるラベルのピクセルを 1 にした二値マスク
+function buildMask(rect, labelSet) {
+  const { width: w } = state.imageData;
+  const labels = state.labels;
+  const pad = effectivePad();
+  const rw = rect.maxX - rect.minX + 1;
+  const rh = rect.maxY - rect.minY + 1;
+  const ow = rw + pad * 2, oh = rh + pad * 2;
+  const mask = new Uint8Array(ow * oh);
+  for (let y = 0; y < rh; y++) {
+    for (let x = 0; x < rw; x++) {
+      const L = labels[(rect.minY + y) * w + (rect.minX + x)];
+      if (L !== 0 && labelSet.has(L)) mask[(y + pad) * ow + (x + pad)] = 1;
+    }
+  }
+  return { mask, ow, oh };
+}
+
+// 4近傍の収縮（チョーク）。キャンバス外は背景扱い
+function erodeMask(mask, ow, oh, n) {
+  let cur = mask;
+  for (let k = 0; k < n; k++) {
+    const next = new Uint8Array(ow * oh);
+    for (let y = 0; y < oh; y++) {
+      for (let x = 0; x < ow; x++) {
+        const p = y * ow + x;
+        if (!cur[p]) continue;
+        if (x === 0 || !cur[p - 1]) continue;
+        if (x === ow - 1 || !cur[p + 1]) continue;
+        if (y === 0 || !cur[p - ow]) continue;
+        if (y === oh - 1 || !cur[p + ow]) continue;
+        next[p] = 1;
+      }
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+// 4近傍の膨張（スプレッド）。キャンバスの外へは広がらない
+function dilateMask(mask, ow, oh, n) {
+  let cur = mask;
+  for (let k = 0; k < n; k++) {
+    const next = new Uint8Array(cur);
+    for (let y = 0; y < oh; y++) {
+      for (let x = 0; x < ow; x++) {
+        const p = y * ow + x;
+        if (cur[p]) continue;
+        if ((x > 0 && cur[p - 1]) || (x < ow - 1 && cur[p + 1]) ||
+            (y > 0 && cur[p - ow]) || (y < oh - 1 && cur[p + ow])) {
+          next[p] = 1;
+        }
+      }
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+// 白版（UVプリンター用の白インキレイヤー）: マスク部分を白で塗ったPNG。
+// カラーPNGと同じキャンバスサイズなので、そのまま重ねて版ズレなく使える
+function whiteCanvas(rect, labelSet) {
+  const { width: w, data } = state.imageData;
+  const pad = effectivePad();
+  const { mask, ow, oh } = buildMask(rect, labelSet);
+  const adj = state.whiteShrink; // プラス=チョーク（収縮）、マイナス=スプレッド（拡張）
+  const m = adj > 0 ? erodeMask(mask, ow, oh, adj)
+          : adj < 0 ? dilateMask(mask, ow, oh, -adj)
+          : mask;
+  const out = new Uint8ClampedArray(ow * oh * 4);
+  for (let p = 0; p < ow * oh; p++) {
+    if (!m[p]) continue;
+    const x = (p % ow) - pad, y = ((p / ow) | 0) - pad;
+    const sa = data[((rect.minY + y) * w + (rect.minX + x)) * 4 + 3];
+    out[p * 4] = out[p * 4 + 1] = out[p * 4 + 2] = 255;
+    // 調整なしの場合は元のアルファを引き継いでエッジを滑らかに。収縮・拡張時はベタ塗り
+    out[p * 4 + 3] = adj !== 0 ? 255 : sa;
+  }
+  const c = document.createElement("canvas");
+  c.width = ow; c.height = oh;
+  c.getContext("2d").putImageData(new ImageData(out, ow, oh), 0, 0);
+  return c;
+}
+
+// 輪郭抽出: マスク境界の単位セグメントを列挙し、始点→セグメントのマップで閉ループに連結。
+// 穴（ドーナツ形状の内側）も含めてすべての境界ループが得られる
+function traceContours(mask, ow, oh) {
+  const segs = new Map(); // "x,y"（始点）→ [sx,sy,ex,ey] の配列
+  const addSeg = (sx, sy, ex, ey) => {
+    const k = sx + "," + sy;
+    let a = segs.get(k);
+    if (!a) { a = []; segs.set(k, a); }
+    a.push([sx, sy, ex, ey]);
+  };
+  for (let y = 0; y < oh; y++) {
+    for (let x = 0; x < ow; x++) {
+      if (!mask[y * ow + x]) continue;
+      if (y === 0 || !mask[(y - 1) * ow + x]) addSeg(x, y, x + 1, y);           // 上辺
+      if (x === ow - 1 || !mask[y * ow + x + 1]) addSeg(x + 1, y, x + 1, y + 1); // 右辺
+      if (y === oh - 1 || !mask[(y + 1) * ow + x]) addSeg(x + 1, y + 1, x, y + 1); // 下辺
+      if (x === 0 || !mask[y * ow + x - 1]) addSeg(x, y + 1, x, y);              // 左辺
+    }
+  }
+  const loops = [];
+  for (const arr of segs.values()) {
+    while (arr.length) {
+      const first = arr.pop();
+      const loop = [[first[0], first[1]]];
+      let cx = first[2], cy = first[3];
+      while (!(cx === loop[0][0] && cy === loop[0][1])) {
+        loop.push([cx, cy]);
+        const a = segs.get(cx + "," + cy);
+        if (!a || !a.length) break; // 安全弁（正常なマスクでは起きない）
+        const s = a.pop();
+        cx = s[2]; cy = s[3];
+      }
+      loops.push(simplifyLoop(loop, 1));
+    }
+  }
+  return loops;
+}
+
+// Douglas-Peucker による頂点間引き（閉ループ用）
+function simplifyLoop(pts, eps) {
+  if (pts.length <= 4) return pts;
+  const closed = pts.concat([pts[0]]);
+  const out = dpSimplify(closed, eps);
+  out.pop();
+  return out;
+}
+function dpSimplify(pts, eps) {
+  if (pts.length < 3) return pts.slice();
+  const [x1, y1] = pts[0], [x2, y2] = pts[pts.length - 1];
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  const degenerate = len < 1e-9; // 閉ループでは始点=終点となり基準線が長さ0になる
+  let maxD = -1, idx = -1;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const d = degenerate
+      ? Math.hypot(pts[i][0] - x1, pts[i][1] - y1) // 点からの距離で最遠点を探して分割
+      : Math.abs(dy * (pts[i][0] - x1) - dx * (pts[i][1] - y1)) / len;
+    if (d > maxD) { maxD = d; idx = i; }
+  }
+  if (maxD <= eps) return [pts[0], pts[pts.length - 1]];
+  const a = dpSimplify(pts.slice(0, idx + 1), eps);
+  const b = dpSimplify(pts.slice(idx), eps);
+  return a.concat(b.slice(1));
+}
+
+// レーザーカッター向けSVG（赤いカットパス、px単位）
+function loopsToSvg(loops, ow, oh) {
+  const d = loops
+    .map(loop => "M " + loop.map(p => p[0] + " " + p[1]).join(" L ") + " Z")
+    .join(" ");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ow} ${oh}" width="${ow}" height="${oh}">\n` +
+    `  <path d="${d}" fill="none" stroke="#ff0000" stroke-width="1"/>\n` +
+    `</svg>\n`;
+}
+
+// 輪郭のサムネイル表示用キャンバス
+function loopsToCanvas(loops, ow, oh) {
+  const c = document.createElement("canvas");
+  c.width = ow; c.height = oh;
+  const ctx = c.getContext("2d");
+  ctx.strokeStyle = "#ff4d4d";
+  ctx.lineWidth = Math.max(1, Math.round(ow / 200));
+  loops.forEach(loop => {
+    ctx.beginPath();
+    loop.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.closePath();
+    ctx.stroke();
+  });
+  return c;
+}
+
+function renderResults() {
+  const results = $("results");
+  results.innerHTML = "";
+  if (!state.imageData) {
+    results.innerHTML = '<div id="resultsEmpty">画像を読み込んでください</div>';
+    state.targets = [];
+    updatePreviewResult();
+    return;
+  }
+  const sel = selectedObjects();
+  if (sel.length === 0) {
+    results.innerHTML = '<div id="resultsEmpty">オブジェクトが選択されていません（プレビューをクリックして選択）</div>';
+    state.targets = [];
+    updatePreviewResult();
+    return;
+  }
+
+  // 対象領域とラベル集合の組を作る（whole: 選択全体で1件 / each: オブジェクトごと）
+  const targets = []; // {rect, labelSet, baseName, tagText, tagColor, maskLabel}
+  if (state.mode === "whole") {
+    targets.push({
+      rect: {
+        minX: Math.min(...sel.map(o => o.minX)),
+        minY: Math.min(...sel.map(o => o.minY)),
+        maxX: Math.max(...sel.map(o => o.maxX)),
+        maxY: Math.max(...sel.map(o => o.maxY)),
+      },
+      labelSet: new Set(sel.map(o => o.label)),
+      maskLabel: null,
+      baseName: `${state.fileName}_trimmed`,
+      tagText: "全体トリミング",
+      tagColor: "#4dd2ff",
+    });
+  } else {
+    sel.forEach(o => {
+      const i = state.objects.indexOf(o);
+      targets.push({
+        rect: o,
+        labelSet: new Set([o.label]),
+        maskLabel: o.label,
+        baseName: `${state.fileName}_obj${i + 1}`,
+        tagText: `オブジェクト ${i + 1}`,
+        tagColor: PALETTE[i % PALETTE.length],
+      });
+    });
+  }
+
+  // 出力タイプごとにサムネイルと保存処理を作る
+  const items = []; // {canvas, name, tagText, tagColor, save}
+  targets.forEach(t => {
+    if (state.outputType === "color") {
+      const c = extract(t.rect, t.maskLabel);
+      items.push({
+        canvas: c, name: `${t.baseName}.png`,
+        tagText: t.tagText, tagColor: t.tagColor,
+        save: name => downloadCanvas(c, name),
+      });
+    } else if (state.outputType === "white") {
+      const c = whiteCanvas(t.rect, t.labelSet);
+      items.push({
+        canvas: c, name: `${t.baseName}_white.png`,
+        tagText: `${t.tagText}・白版`, tagColor: "#ffffff",
+        save: name => downloadCanvas(c, name),
+      });
+    } else {
+      const { mask, ow, oh } = buildMask(t.rect, t.labelSet);
+      const loops = traceContours(mask, ow, oh);
+      const svg = loopsToSvg(loops, ow, oh);
+      items.push({
+        canvas: loopsToCanvas(loops, ow, oh), name: `${t.baseName}_outline.svg`,
+        tagText: `${t.tagText}・輪郭`, tagColor: "#ff4d4d",
+        save: name => downloadText(svg, name, "image/svg+xml"),
+      });
+    }
+  });
+
+  state.targets = targets;
+  updatePreviewResult();
+
+  items.forEach(item => {
+    const row = document.createElement("div");
+    row.className = "result-item";
+
+    const thumb = document.createElement("div");
+    thumb.className = "thumb";
+    thumb.appendChild(item.canvas);
+    row.appendChild(thumb);
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.innerHTML =
+      `<span class="tag" style="background:${item.tagColor}">${item.tagText}</span>` +
+      `<div class="name">${item.name}</div>` +
+      `<div class="dim">${item.canvas.width} × ${item.canvas.height} px</div>`;
+    row.appendChild(meta);
+
+    const btn = document.createElement("button");
+    btn.className = "dl-btn";
+    btn.textContent = "保存";
+    btn.addEventListener("click", () => item.save(item.name));
+    row.appendChild(btn);
+
+    results.appendChild(row);
+  });
+
+  if (items.length > 1) {
+    const all = document.createElement("button");
+    all.id = "dlAllBtn";
+    all.textContent = `すべてダウンロード（${items.length}件）`;
+    all.addEventListener("click", () => {
+      items.forEach((item, i) =>
+        setTimeout(() => item.save(item.name), i * 250));
+    });
+    results.appendChild(all);
+  }
+}
+
+// 出力タイプ別のレイヤーキャンバスを生成
+function makeLayerCanvas(t, key) {
+  if (key === "color") return extract(t.rect, t.maskLabel);
+  if (key === "white") return whiteCanvas(t.rect, t.labelSet);
+  const { mask, ow, oh } = buildMask(t.rect, t.labelSet);
+  return loopsToCanvas(traceContours(mask, ow, oh), ow, oh);
+}
+
+// プレビュー右側（元画像の隣）: 表示中レイヤーを不透明度つきで下から順に合成
+function updatePreviewResult() {
+  const box = $("previewResult");
+  box.innerHTML = "";
+  if (!state.targets.length) {
+    if (state.imageData) box.innerHTML = '<div class="pv-cap">選択中のオブジェクトがありません</div>';
+    return;
+  }
+  const visible = state.layers.filter(l => l.visible);
+  state.targets.forEach(t => {
+    const pad = effectivePad();
+    const ow = t.rect.maxX - t.rect.minX + 1 + pad * 2;
+    const oh = t.rect.maxY - t.rect.minY + 1 + pad * 2;
+    const wrap = document.createElement("div");
+    wrap.className = "pv-item";
+    const comp = document.createElement("canvas");
+    comp.width = ow;
+    comp.height = oh;
+    const ctx = comp.getContext("2d");
+    // 配列の先頭が最前面なので、末尾（最背面）から順に描画する
+    for (let i = state.layers.length - 1; i >= 0; i--) {
+      const l = state.layers[i];
+      if (!l.visible) continue;
+      ctx.globalAlpha = l.opacity;
+      ctx.drawImage(makeLayerCanvas(t, l.key), 0, 0);
+    }
+    ctx.globalAlpha = 1;
+    wrap.appendChild(comp);
+    box.appendChild(wrap);
+    const cap = document.createElement("div");
+    cap.className = "pv-cap";
+    const layerText = visible.length
+      ? visible.map(l => LAYER_NAMES[l.key]).join(" + ")
+      : "表示中のレイヤーなし";
+    cap.textContent = `${t.tagText}（${ow} × ${oh} px）— ${layerText}`;
+    box.appendChild(cap);
+  });
+}
+
+// レイヤーパネル: 表示ON/OFF・不透明度・順序入れ替え（上の行ほど前面）
+function renderLayerPanel() {
+  const panel = $("layerPanel");
+  panel.innerHTML = "";
+  state.layers.forEach((l, i) => {
+    const row = document.createElement("div");
+    row.className = "layer-row" + (l.visible ? "" : " off");
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = l.visible;
+    cb.title = "表示／非表示";
+    cb.addEventListener("change", () => {
+      l.visible = cb.checked;
+      renderLayerPanel();
+      updatePreviewResult();
+    });
+    row.appendChild(cb);
+
+    const name = document.createElement("span");
+    name.className = "lname";
+    name.textContent = LAYER_NAMES[l.key];
+    row.appendChild(name);
+
+    const op = document.createElement("input");
+    op.type = "range";
+    op.min = 0; op.max = 100;
+    op.value = Math.round(l.opacity * 100);
+    op.title = "不透明度";
+    op.addEventListener("input", () => {
+      l.opacity = op.value / 100;
+      opVal.textContent = `${op.value}%`;
+      updatePreviewResult();
+    });
+    row.appendChild(op);
+
+    const opVal = document.createElement("span");
+    opVal.className = "lop";
+    opVal.textContent = `${Math.round(l.opacity * 100)}%`;
+    row.appendChild(opVal);
+
+    const up = document.createElement("button");
+    up.className = "layer-btn";
+    up.textContent = "▲";
+    up.title = "前面へ";
+    up.disabled = i === 0;
+    up.addEventListener("click", () => {
+      [state.layers[i - 1], state.layers[i]] = [state.layers[i], state.layers[i - 1]];
+      renderLayerPanel();
+      updatePreviewResult();
+    });
+    row.appendChild(up);
+
+    const down = document.createElement("button");
+    down.className = "layer-btn";
+    down.textContent = "▼";
+    down.title = "背面へ";
+    down.disabled = i === state.layers.length - 1;
+    down.addEventListener("click", () => {
+      [state.layers[i], state.layers[i + 1]] = [state.layers[i + 1], state.layers[i]];
+      renderLayerPanel();
+      updatePreviewResult();
+    });
+    row.appendChild(down);
+
+    panel.appendChild(row);
+  });
+}
+
+function downloadCanvas(canvas, name) {
+  canvas.toBlob(blob => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }, "image/png");
+}
+
+function downloadText(text, name, mime) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+// ---------- 情報表示 ----------
+function updateInfo() {
+  if (!state.imageData) return;
+  const { width: w, height: h } = state.imageData;
+  $("imgInfo").textContent = `${state.fileName}.png — ${w} × ${h} px`;
+  const n = state.objects.length;
+  const s = state.selected.size;
+  $("objectCount").innerHTML =
+    n === 0
+      ? "オブジェクトが検出されませんでした（閾値を下げてみてください）"
+      : `検出: <b>${n}</b> オブジェクト ／ 選択中: <b>${s}</b>`;
+}
+
+// ---------- コントロール ----------
+let debounceTimer = null;
+$("threshold").addEventListener("input", e => {
+  state.threshold = +e.target.value;
+  $("thVal").textContent = state.threshold;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => { if (state.imageData) recompute(); }, 150);
+});
+
+$("padding").addEventListener("input", e => {
+  const v = Math.max(0, Math.min(500, +e.target.value || 0));
+  state.padding = v;
+  if (state.imageData) renderResults();
+});
+
+$("modeWhole").addEventListener("click", () => setMode("whole"));
+$("modeEach").addEventListener("click", () => setMode("each"));
+function setMode(m) {
+  state.mode = m;
+  $("modeWhole").classList.toggle("active", m === "whole");
+  $("modeEach").classList.toggle("active", m === "each");
+  if (state.imageData) renderResults();
+}
+
+const TYPE_HINTS = {
+  color: "通常の切り出し画像（透明背景つきPNG）",
+  white: "UVプリンター用の白インキレイヤー。カラーPNGと同じサイズで出力されるので、そのまま重ねて使えます。",
+  outline: "レーザーカッター用のカットパス（赤線・px単位のSVG）。カラーPNGと同じサイズなので位置合わせ不要です。",
+};
+$("typeColor").addEventListener("click", () => setOutputType("color"));
+$("typeWhite").addEventListener("click", () => setOutputType("white"));
+$("typeOutline").addEventListener("click", () => setOutputType("outline"));
+function setOutputType(t) {
+  state.outputType = t;
+  $("typeColor").classList.toggle("active", t === "color");
+  $("typeWhite").classList.toggle("active", t === "white");
+  $("typeOutline").classList.toggle("active", t === "outline");
+  $("typeHint").textContent = TYPE_HINTS[t];
+  $("whiteShrinkRow").style.display = t === "white" ? "block" : "none";
+  // 選んだタイプのレイヤーはプレビューでも表示状態にする
+  const layer = state.layers.find(l => l.key === t);
+  if (layer && !layer.visible) {
+    layer.visible = true;
+    renderLayerPanel();
+  }
+  if (state.imageData) renderResults();
+}
+
+$("whiteShrink").addEventListener("input", e => {
+  state.whiteShrink = Math.max(-50, Math.min(50, +e.target.value || 0));
+  // 白版はダウンロードリストだけでなく、プレビューのレイヤー表示にも影響する
+  if (state.imageData) renderResults();
+});
+
+renderLayerPanel();
+</script>
+</body>
+</html>
