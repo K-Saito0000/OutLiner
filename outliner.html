@@ -301,9 +301,35 @@
   }
   #photoStatus { margin: 0 0 12px; }
   #photoStatus.busy { color: var(--primary-dark); font-weight: 600; }
-  #photoConfirm { width: 100%; margin-top: 4px; }
-  #photoConfirm:disabled { opacity: .5; cursor: default; }
-  #photoReedit { margin-top: 8px; }
+  #photoConfirm, #quantConfirm { width: 100%; margin-top: 4px; }
+  #photoConfirm:disabled, #quantConfirm:disabled { opacity: .5; cursor: default; }
+  #photoNav { display: inline-flex; gap: 8px; margin-top: 8px; }
+  .check-label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+  .check-label input { accent-color: var(--primary); }
+  #quantStage { margin-bottom: 16px; }
+  #quantCanvas { max-width: 100%; max-height: 64vh; cursor: crosshair; }
+  #paletteList { display: flex; flex-direction: column; gap: 6px; }
+  .pal-row {
+    display: flex; align-items: center; gap: 9px;
+    background: var(--card2);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .pal-row.sel { border-color: var(--primary); background: var(--primary-bg); }
+  .pal-row input[type="color"] {
+    width: 34px; height: 26px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0;
+    background: none;
+    cursor: pointer;
+  }
+  .pal-row .pal-name { flex: 1; font-weight: 600; }
+  .pal-row .pal-share { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pal-row .pal-edited { color: var(--primary-dark); font-size: 10.5px; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -345,7 +371,11 @@
           <button id="brushErase">けす</button>
           <button id="brushAdd">たす</button>
         </div>
-        <div class="hint">「けす」で背景に、「たす」で残す側に塗り直せます。</div>
+        <div class="hint">「けす」で背景に、「たす」で残す側に塗り直せます。塗りはなぞり終わったときに反映されます。</div>
+      </div>
+      <div class="control-row">
+        <label class="check-label"><input type="checkbox" id="brushSmart" checked> にた色モード</label>
+        <div class="hint">なぞった場所の近くにある似た色の範囲まで、まとめて自動で切り替えます（選択範囲近傍の自動切り抜き）。OFFにするとなぞった円の中だけを塗ります。</div>
       </div>
       <div class="control-row">
         <label>ブラシサイズ <span class="val" id="brushSizeVal">24</span></label>
@@ -356,8 +386,20 @@
         <button id="maskRedoBtn" class="layer-btn">やり直す</button>
         <button id="segRerunBtn" class="layer-btn">AI切り抜きをやり直す</button>
       </div>
+      <button id="photoConfirm" class="dl-btn">減色へ進む</button>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="quantStage" style="display:none">
+  <h2><span class="step">AI</span>減色（色の調整）</h2>
+  <div class="photo-grid">
+    <div class="photo-canvas-box">
+      <canvas id="quantCanvas"></canvas>
+    </div>
+    <div class="photo-controls">
       <div class="control-row">
-        <label for="quantK">減色（色数）</label>
+        <label for="quantK">色数</label>
         <select id="quantK">
           <option value="0">減色しない</option>
           <option value="2">2色</option>
@@ -370,7 +412,16 @@
         </select>
         <div class="hint">UVプリントのインキ層分けやレーザー彫刻の段階分けに使えます。</div>
       </div>
-      <button id="photoConfirm" class="dl-btn">この内容で切り出しへ進む</button>
+      <div class="control-row" id="paletteRow">
+        <label>パレット（選択箇所の色を調整）</label>
+        <div id="paletteList"></div>
+        <div class="hint">プレビュー上をクリックすると、その場所の色スロットが選択されます。スウォッチをクリックすると色を差し替えられます。</div>
+      </div>
+      <div class="control-row btn-row">
+        <button id="quantBack" class="layer-btn">← 切り抜きへ戻る</button>
+        <button id="paletteReset" class="layer-btn">色調整をリセット</button>
+      </div>
+      <button id="quantConfirm" class="dl-btn">この内容で切り出しへ進む</button>
     </div>
   </div>
 </div>
@@ -393,7 +444,10 @@
       <div id="previewEmpty">画像を読み込むと、検出したオブジェクトの輪郭が表示されます</div>
     </div>
     <div id="imgInfo"></div>
-    <button id="photoReedit" class="layer-btn" style="display:none">写真の切り抜きへ戻る</button>
+    <span id="photoNav" style="display:none">
+      <button id="photoReedit" class="layer-btn">← 切り抜きへ戻る</button>
+      <button id="quantReedit" class="layer-btn">← 減色へ戻る</button>
+    </span>
     <div class="hint" id="previewHint" style="display:none">
       オブジェクトをクリックすると選択／解除を切り替えられます。選択中のオブジェクトだけが切り出し対象になります。
     </div>
@@ -523,7 +577,8 @@ function loadFile(file) {
     state.fileName = file.name.replace(/\.png$/i, "");
     // 写真ステージが出ていたら閉じる
     $("photoStage").style.display = "none";
-    $("photoReedit").style.display = "none";
+    $("quantStage").style.display = "none";
+    $("photoNav").style.display = "none";
     recompute();
   };
   img.onerror = () => alert("画像の読み込みに失敗しました");
@@ -1275,12 +1330,20 @@ const photo = {
   baseCanvas: null,   // 作業解像度に焼いた元画像
   probMap: null,      // Float32Array(SEG_N²) セグメンテーション確率マップ
   mask: null,         // Uint8Array(w*h) 作業解像度の2値マスク
+  labData: null,      // Float32Array(w*h*3) 元画像のLabキャッシュ（にた色モード用）
   undoStack: [],
   redoStack: [],
   segThreshold: 0.45,
   brush: "none",      // "none" | "erase" | "add"
+  brushSmart: true,   // にた色モード（ストローク近傍の類似色まで自動で切り替え）
   brushSize: 24,
+  strokePts: [],      // なぞり中のストローク点列（作業解像度座標）
   quantK: 4,          // 0 = 減色なし
+  cutoutData: null,   // 切り抜き確定後のRGBA（減色ステージの入力）
+  quantMap: null,     // Int32Array(w*h) 画素→パレットスロット（-1=透明）
+  palette: [],        // k-meansで得たパレット [[r,g,b],...]
+  overrides: {},      // スロットごとの色差し替え {slot: [r,g,b]}
+  selectedSlot: -1,
   session: null,
   painting: false,
   renderQueued: false,
@@ -1332,10 +1395,18 @@ function loadPhotoFile(file) {
     photo.baseCanvas = c;
     photo.mask = null;
     photo.probMap = null;
+    photo.labData = null;
+    photo.cutoutData = null;
+    photo.quantMap = null;
+    photo.palette = [];
+    photo.overrides = {};
+    photo.selectedSlot = -1;
+    photo.strokePts = [];
     photo.undoStack = [];
     photo.redoStack = [];
     $("photoStage").style.display = "block";
-    $("photoReedit").style.display = "none";
+    $("quantStage").style.display = "none";
+    $("photoNav").style.display = "none";
     $("photoConfirm").disabled = true;
     updateMaskBtns();
     renderPhotoCanvas();
@@ -1510,37 +1581,134 @@ function drawPhotoCanvas() {
   }
   photo._ovCanvas.getContext("2d").putImageData(photo._ovData, 0, 0);
   ctx.drawImage(photo._ovCanvas, 0, 0);
+  // なぞり中のストローク表示（けす=赤 / たす=緑）
+  if (photo.painting && photo.strokePts.length) {
+    const rad = strokeRadius();
+    ctx.fillStyle = photo.brush === "erase" ? "rgba(239,68,68,.4)" : "rgba(34,197,94,.4)";
+    photo.strokePts.forEach(([px, py]) => {
+      ctx.beginPath();
+      ctx.arc(px, py, rad, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
 }
 
-// ---- ブラシ修正 ----
+// ---- ブラシ修正（なぞり終わりで反映。にた色モードは類似色領域へ自動成長） ----
 const photoCanvas = $("photoCanvas");
 photoCanvas.addEventListener("pointerdown", e => {
   if (photo.brush === "none" || !photo.mask) return;
   e.preventDefault();
   photoCanvas.setPointerCapture(e.pointerId);
-  pushMaskUndo();
   photo.painting = true;
-  paintAt(e);
+  photo.strokePts = [];
+  addStrokePt(e);
 });
-photoCanvas.addEventListener("pointermove", e => { if (photo.painting) paintAt(e); });
+photoCanvas.addEventListener("pointermove", e => { if (photo.painting) addStrokePt(e); });
 ["pointerup", "pointercancel"].forEach(ev =>
-  photoCanvas.addEventListener(ev, () => { photo.painting = false; }));
+  photoCanvas.addEventListener(ev, () => {
+    if (!photo.painting) return;
+    photo.painting = false;
+    applyStroke();
+  }));
 
-function paintAt(e) {
+function strokeRadius() {
+  const r = photoCanvas.getBoundingClientRect();
+  return photo.brushSize * (photo.baseCanvas.width / r.width); // 表示px→作業px換算
+}
+function addStrokePt(e) {
   const r = photoCanvas.getBoundingClientRect();
   const { width: w, height: h } = photo.baseCanvas;
-  const x = (e.clientX - r.left) / r.width * w;
-  const y = (e.clientY - r.top) / r.height * h;
-  const rad = photo.brushSize * (w / r.width); // 表示px→作業px換算
-  const v = photo.brush === "add" ? 1 : 0;
+  photo.strokePts.push([
+    (e.clientX - r.left) / r.width * w,
+    (e.clientY - r.top) / r.height * h,
+  ]);
+  renderPhotoCanvas();
+}
+
+// 元画像のLabキャッシュ（にた色モード用・写真ごとに1回だけ計算）
+function ensurePhotoLab() {
+  if (photo.labData) return;
+  const { width: w, height: h } = photo.baseCanvas;
+  const d = photo.baseCanvas.getContext("2d").getImageData(0, 0, w, h).data;
+  const lab = new Float32Array(w * h * 3);
+  for (let p = 0; p < w * h; p++) {
+    const l = rgb2lab(d[p * 4], d[p * 4 + 1], d[p * 4 + 2]);
+    lab[p * 3] = l[0]; lab[p * 3 + 1] = l[1]; lab[p * 3 + 2] = l[2];
+  }
+  photo.labData = lab;
+}
+
+// ペット刺繍メーカーの applyStrokeEdit を移植:
+// けす=前景を対象 / たす=背景を対象。にた色モードではストローク下の対象画素をシードに
+// Lab類似色（しきい値20）の連結領域へBFS成長し、まとめて切り替える
+function applyStroke() {
+  if (!photo.strokePts.length || !photo.mask) return;
+  const { width: w, height: h } = photo.baseCanvas;
+  const rad = strokeRadius();
+  const target = photo.brush === "erase" ? 1 : 0;
+  const setTo = photo.brush === "erase" ? 0 : 1;
+  pushMaskUndo();
+  // 1) ストローク円をスタンプ
+  const stamp = new Uint8Array(w * h);
   const r2 = rad * rad;
-  const x0 = Math.max(0, Math.floor(x - rad)), x1 = Math.min(w - 1, Math.ceil(x + rad));
-  const y0 = Math.max(0, Math.floor(y - rad)), y1 = Math.min(h - 1, Math.ceil(y + rad));
-  for (let yy = y0; yy <= y1; yy++) {
-    for (let xx = x0; xx <= x1; xx++) {
-      if ((xx - x) ** 2 + (yy - y) ** 2 <= r2) photo.mask[yy * w + xx] = v;
+  photo.strokePts.forEach(([px, py]) => {
+    const x0 = Math.max(0, Math.floor(px - rad)), x1 = Math.min(w - 1, Math.ceil(px + rad));
+    const y0 = Math.max(0, Math.floor(py - rad)), y1 = Math.min(h - 1, Math.ceil(py + rad));
+    for (let yy = y0; yy <= y1; yy++) {
+      for (let xx = x0; xx <= x1; xx++) {
+        if ((xx - px) ** 2 + (yy - py) ** 2 <= r2) stamp[yy * w + xx] = 1;
+      }
+    }
+  });
+  if (!photo.brushSmart) {
+    // シンプルモード: なぞったところだけ反映
+    for (let p = 0; p < w * h; p++) if (stamp[p]) photo.mask[p] = setTo;
+  } else {
+    // 2) にた色モード: スタンプ内の対象画素をシードに類似色領域へ成長
+    ensurePhotoLab();
+    const lab = photo.labData;
+    const seeds = [];
+    let sl = 0, sa = 0, sb = 0;
+    for (let p = 0; p < w * h; p++) {
+      if (stamp[p] && photo.mask[p] === target) {
+        seeds.push(p);
+        sl += lab[p * 3]; sa += lab[p * 3 + 1]; sb += lab[p * 3 + 2];
+      }
+    }
+    if (!seeds.length) {
+      // 対象状態の画素がストローク下に無い → スタンプをそのまま反映
+      for (let p = 0; p < w * h; p++) if (stamp[p]) photo.mask[p] = setTo;
+    } else {
+      const mean = [sl / seeds.length, sa / seeds.length, sb / seeds.length];
+      const T2 = 20 * 20;                                    // 色距離しきい値（ペット刺繍と同値）
+      const MAXD = Math.round(30 * Math.max(w, h) / SEG_N);  // 成長距離上限（320グリッド比で換算）
+      const depth = new Int16Array(w * h).fill(-1);
+      const queue = new Int32Array(w * h);
+      let qh = 0, qt = 0;
+      seeds.forEach(p => { depth[p] = 0; queue[qt++] = p; });
+      const picked = [];
+      while (qh < qt) {
+        const cur = queue[qh++];
+        picked.push(cur);
+        const d0 = depth[cur];
+        if (d0 >= MAXD) continue;
+        const x = cur % w, y = (cur / w) | 0;
+        for (let k = 0; k < 4; k++) {
+          const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0);
+          const ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0);
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const j = ny * w + nx;
+          if (depth[j] >= 0 || photo.mask[j] !== target) continue;
+          const dl = lab[j * 3] - mean[0], da = lab[j * 3 + 1] - mean[1], db = lab[j * 3 + 2] - mean[2];
+          if (2.4 * dl * dl + da * da + db * db > T2) continue;
+          depth[j] = d0 + 1;
+          queue[qt++] = j;
+        }
+      }
+      picked.forEach(p => { photo.mask[p] = setTo; });
     }
   }
+  photo.strokePts = [];
   renderPhotoCanvas();
 }
 
@@ -1633,34 +1801,8 @@ function kmeansLab(pts, k) {
   }
   return cents;
 }
-// ImageData を k色に減色（alpha>0 の画素のみ対象）
-function quantizeImageData(img, k) {
-  const d = img.data, n = img.width * img.height;
-  const pts = [];
-  const stride = Math.max(1, Math.floor(n / 15000));
-  for (let p = 0; p < n; p += stride) {
-    if (d[p * 4 + 3] >= 128) pts.push(rgb2lab(d[p * 4], d[p * 4 + 1], d[p * 4 + 2]));
-  }
-  if (pts.length < k) return;
-  const cents = kmeansLab(pts, k);
-  const palette = cents.map(c => lab2rgb(c[0], c[1], c[2]));
-  for (let p = 0; p < n; p++) {
-    if (d[p * 4 + 3] === 0) continue;
-    const lab = rgb2lab(d[p * 4], d[p * 4 + 1], d[p * 4 + 2]);
-    let bi = 0, bd = Infinity;
-    for (let c = 0; c < cents.length; c++) {
-      const dist = labDist2(lab, cents[c]);
-      if (dist < bd) { bd = dist; bi = c; }
-    }
-    d[p * 4] = palette[bi][0];
-    d[p * 4 + 1] = palette[bi][1];
-    d[p * 4 + 2] = palette[bi][2];
-  }
-}
-
-// ---- 確定: 切り抜き（＋減色）結果を既存パイプラインへ渡す ----
-function confirmPhoto() {
-  if (!photo.mask || !photo.baseCanvas) return;
+// ---- 減色ステージ: 切り抜き ⇄ 減色 ⇄ 切り出し を往復できる ----
+function buildCutoutData() {
   const { width: w, height: h } = photo.baseCanvas;
   const src = photo.baseCanvas.getContext("2d").getImageData(0, 0, w, h);
   const out = new ImageData(w, h);
@@ -1672,11 +1814,158 @@ function confirmPhoto() {
     out.data[q + 2] = src.data[q + 2];
     out.data[q + 3] = 255;
   }
-  if (photo.quantK >= 2) quantizeImageData(out, photo.quantK);
-  state.imageData = out;
-  state.fileName = photo.fileName + "_cutout";
+  return out;
+}
+
+// 切り抜きステージ → 減色ステージへ
+function enterQuantStage() {
+  if (!photo.mask) return;
+  photo.cutoutData = buildCutoutData();
   $("photoStage").style.display = "none";
-  $("photoReedit").style.display = "inline-block";
+  $("quantStage").style.display = "block";
+  recomputeQuant();
+}
+
+// k-means実行: パレットと画素→スロットの割当マップを作る
+function recomputeQuant() {
+  const img = photo.cutoutData;
+  photo.selectedSlot = -1;
+  if (photo.quantK < 2 || !img) {
+    photo.quantMap = null;
+    photo.palette = [];
+    renderQuantCanvas();
+    renderPaletteList();
+    return;
+  }
+  const d = img.data, n = img.width * img.height;
+  const pts = [];
+  const stride = Math.max(1, Math.floor(n / 15000));
+  for (let p = 0; p < n; p += stride) {
+    if (d[p * 4 + 3] >= 128) pts.push(rgb2lab(d[p * 4], d[p * 4 + 1], d[p * 4 + 2]));
+  }
+  if (pts.length < photo.quantK) {
+    photo.quantMap = null;
+    photo.palette = [];
+    renderQuantCanvas();
+    renderPaletteList();
+    return;
+  }
+  const cents = kmeansLab(pts, photo.quantK);
+  photo.palette = cents.map(c => lab2rgb(c[0], c[1], c[2]));
+  const map = new Int32Array(n).fill(-1);
+  for (let p = 0; p < n; p++) {
+    if (d[p * 4 + 3] === 0) continue;
+    const lab = rgb2lab(d[p * 4], d[p * 4 + 1], d[p * 4 + 2]);
+    let bi = 0, bd = Infinity;
+    for (let c = 0; c < cents.length; c++) {
+      const dist = labDist2(lab, cents[c]);
+      if (dist < bd) { bd = dist; bi = c; }
+    }
+    map[p] = bi;
+  }
+  photo.quantMap = map;
+  renderQuantCanvas();
+  renderPaletteList();
+}
+
+function slotColor(i) {
+  return photo.overrides[i] || photo.palette[i];
+}
+
+// 減色（＋色差し替え）適用後の ImageData。減色なしなら切り抜きのコピー
+function quantizedImageData() {
+  const img = photo.cutoutData;
+  const out = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
+  if (photo.quantMap) {
+    const d = out.data;
+    for (let p = 0; p < img.width * img.height; p++) {
+      const s = photo.quantMap[p];
+      if (s < 0) continue;
+      const c = slotColor(s);
+      d[p * 4] = c[0]; d[p * 4 + 1] = c[1]; d[p * 4 + 2] = c[2];
+    }
+  }
+  return out;
+}
+
+function renderQuantCanvas() {
+  const qc = $("quantCanvas");
+  if (!photo.cutoutData) { qc.width = qc.height = 0; return; }
+  const img = quantizedImageData();
+  qc.width = img.width;
+  qc.height = img.height;
+  qc.getContext("2d").putImageData(img, 0, 0);
+}
+
+function renderPaletteList() {
+  const list = $("paletteList");
+  list.innerHTML = "";
+  $("paletteRow").style.display = photo.palette.length ? "block" : "none";
+  if (!photo.quantMap) return;
+  const counts = new Array(photo.palette.length).fill(0);
+  let total = 0;
+  for (let p = 0; p < photo.quantMap.length; p++) {
+    if (photo.quantMap[p] >= 0) { counts[photo.quantMap[p]]++; total++; }
+  }
+  photo.palette.forEach((_, i) => {
+    const row = document.createElement("div");
+    row.className = "pal-row" + (photo.selectedSlot === i ? " sel" : "");
+    const c = slotColor(i);
+    const sw = document.createElement("input");
+    sw.type = "color";
+    sw.value = "#" + c.map(v => v.toString(16).padStart(2, "0")).join("");
+    sw.addEventListener("click", e => e.stopPropagation());
+    sw.addEventListener("input", () => {
+      photo.overrides[i] = [
+        parseInt(sw.value.slice(1, 3), 16),
+        parseInt(sw.value.slice(3, 5), 16),
+        parseInt(sw.value.slice(5, 7), 16),
+      ];
+      edited.textContent = "変更済";
+      renderQuantCanvas(); // ピッカーを閉じないよう行の再構築はしない
+    });
+    row.appendChild(sw);
+    const name = document.createElement("span");
+    name.className = "pal-name";
+    name.textContent = `色${i + 1}`;
+    row.appendChild(name);
+    const edited = document.createElement("span");
+    edited.className = "pal-edited";
+    edited.textContent = photo.overrides[i] ? "変更済" : "";
+    row.appendChild(edited);
+    const share = document.createElement("span");
+    share.className = "pal-share";
+    share.textContent = total ? Math.round(counts[i] / total * 100) + "%" : "";
+    row.appendChild(share);
+    row.addEventListener("click", () => selectSlot(i));
+    list.appendChild(row);
+  });
+}
+
+function selectSlot(i) {
+  photo.selectedSlot = i;
+  [...$("paletteList").children].forEach((row, idx) => row.classList.toggle("sel", idx === i));
+}
+
+// プレビュークリックでその場所の色スロットを選択
+$("quantCanvas").addEventListener("click", e => {
+  if (!photo.quantMap) return;
+  const qc = $("quantCanvas");
+  const r = qc.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left) / r.width * qc.width);
+  const y = Math.floor((e.clientY - r.top) / r.height * qc.height);
+  if (x < 0 || y < 0 || x >= qc.width || y >= qc.height) return;
+  const s = photo.quantMap[y * qc.width + x];
+  if (s >= 0) selectSlot(s);
+});
+
+// ---- 確定: 減色ステージの結果を既存パイプラインへ渡す ----
+function confirmQuant() {
+  if (!photo.cutoutData) return;
+  state.imageData = quantizedImageData();
+  state.fileName = photo.fileName + "_cutout";
+  $("quantStage").style.display = "none";
+  $("photoNav").style.display = "inline-flex";
   recompute();
 }
 
@@ -1704,11 +1993,38 @@ $("brushSize").addEventListener("input", e => {
 $("maskUndoBtn").addEventListener("click", maskUndo);
 $("maskRedoBtn").addEventListener("click", maskRedo);
 $("segRerunBtn").addEventListener("click", () => rebuildMaskFromProb(true));
-$("quantK").addEventListener("change", e => { photo.quantK = +e.target.value; });
-$("photoConfirm").addEventListener("click", confirmPhoto);
-$("photoReedit").addEventListener("click", () => {
+$("brushSmart").addEventListener("change", e => { photo.brushSmart = e.target.checked; });
+
+// ステップ間ナビゲーション（切り抜き ⇄ 減色 ⇄ 切り出し）
+$("photoConfirm").addEventListener("click", enterQuantStage);
+$("quantBack").addEventListener("click", () => {
+  $("quantStage").style.display = "none";
   $("photoStage").style.display = "block";
   renderPhotoCanvas();
+});
+$("quantK").addEventListener("change", e => {
+  photo.quantK = +e.target.value;
+  photo.overrides = {};
+  if (photo.cutoutData) recomputeQuant();
+});
+$("paletteReset").addEventListener("click", () => {
+  photo.overrides = {};
+  renderQuantCanvas();
+  renderPaletteList();
+});
+$("quantConfirm").addEventListener("click", confirmQuant);
+$("photoReedit").addEventListener("click", () => {
+  $("photoStage").style.display = "block";
+  $("quantStage").style.display = "none";
+  renderPhotoCanvas();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+$("quantReedit").addEventListener("click", () => {
+  if (!photo.cutoutData) return;
+  $("quantStage").style.display = "block";
+  $("photoStage").style.display = "none";
+  renderQuantCanvas();
+  renderPaletteList();
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
