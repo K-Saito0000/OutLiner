@@ -330,6 +330,75 @@
   .pal-row .pal-name { flex: 1; font-weight: 600; }
   .pal-row .pal-share { color: var(--muted); font-variant-numeric: tabular-nums; }
   .pal-row .pal-edited { color: var(--primary-dark); font-size: 10.5px; font-weight: 700; }
+  .pal-row .pal-badge {
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 20px;
+    padding: 1px 7px;
+    background: var(--primary-bg);
+    color: var(--primary-dark);
+    white-space: nowrap;
+  }
+  .pal-row .pal-del {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 10.5px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+  .pal-row .pal-del:hover { color: #ef4444; border-color: #ef4444; }
+  #mergeBox { margin-top: 8px; }
+  .merge-panel {
+    background: var(--primary-bg);
+    border: 1.5px solid var(--primary);
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 12px;
+  }
+  .merge-panel .merge-title { font-weight: 700; margin-bottom: 8px; }
+  .merge-pick { display: flex; gap: 6px; flex-wrap: wrap; }
+  .merge-pick button {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .merge-pick button:hover { border-color: var(--primary); }
+  .merge-pick .sw { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); }
+  #unmergeAll {
+    width: 100%;
+    margin-top: 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 7px;
+    cursor: pointer;
+  }
+  #unmergeAll:hover { color: var(--primary-dark); border-color: var(--primary); }
+
+  /* キーカラーのナビゲーションボタン */
+  .nav-btn {
+    background: var(--primary-bg);
+    border: 1.5px solid var(--primary);
+    border-radius: 10px;
+    color: var(--primary-dark);
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 9px 14px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .nav-btn:hover { background: var(--primary); color: #fff; }
 </style>
 </head>
 <body>
@@ -393,6 +462,7 @@
 
 <div class="panel" id="quantStage" style="display:none">
   <h2><span class="step">AI</span>減色（色の調整）</h2>
+  <div id="quantStatus" class="hint"></div>
   <div class="photo-grid">
     <div class="photo-canvas-box">
       <canvas id="quantCanvas"></canvas>
@@ -413,12 +483,16 @@
         <div class="hint">UVプリントのインキ層分けやレーザー彫刻の段階分けに使えます。</div>
       </div>
       <div class="control-row" id="paletteRow">
-        <label>パレット（選択箇所の色を調整）</label>
+        <label>パレット</label>
         <div id="paletteList"></div>
-        <div class="hint">プレビュー上をクリックすると、その場所の色スロットが選択されます。スウォッチをクリックすると色を差し替えられます。</div>
+        <div id="mergeBox"></div>
+        <div class="hint">
+          <b>プレビューをクリック</b>すると、その場所の色を元画像から作って独立した色に追加できます（目・模様などの救済）。<br>
+          <b>パレットの行をクリック</b>して2色以上選ぶと、ひとつの色にまとめられます。スウォッチで色の差し替えも可能です。
+        </div>
       </div>
       <div class="control-row btn-row">
-        <button id="quantBack" class="layer-btn">← 切り抜きへ戻る</button>
+        <button id="quantBack" class="nav-btn">← 切り抜きへ戻る</button>
         <button id="paletteReset" class="layer-btn">色調整をリセット</button>
       </div>
       <button id="quantConfirm" class="dl-btn">この内容で切り出しへ進む</button>
@@ -445,8 +519,8 @@
     </div>
     <div id="imgInfo"></div>
     <span id="photoNav" style="display:none">
-      <button id="photoReedit" class="layer-btn">← 切り抜きへ戻る</button>
-      <button id="quantReedit" class="layer-btn">← 減色へ戻る</button>
+      <button id="photoReedit" class="nav-btn">← 切り抜きへ戻る</button>
+      <button id="quantReedit" class="nav-btn">← 減色へ戻る</button>
     </span>
     <div class="hint" id="previewHint" style="display:none">
       オブジェクトをクリックすると選択／解除を切り替えられます。選択中のオブジェクトだけが切り出し対象になります。
@@ -1343,7 +1417,9 @@ const photo = {
   quantMap: null,     // Int32Array(w*h) 画素→パレットスロット（-1=透明）
   palette: [],        // k-meansで得たパレット [[r,g,b],...]
   overrides: {},      // スロットごとの色差し替え {slot: [r,g,b]}
-  selectedSlot: -1,
+  regionAdds: [],     // クリック追加した独立色 [{mask: Uint8Array, rgb: [r,g,b]}]
+  slotMerge: {},      // 色まとめ: 子スロット→親スロット
+  mergeSel: new Set(),// まとめ対象として選択中のスロット
   session: null,
   painting: false,
   renderQueued: false,
@@ -1400,7 +1476,9 @@ function loadPhotoFile(file) {
     photo.quantMap = null;
     photo.palette = [];
     photo.overrides = {};
-    photo.selectedSlot = -1;
+    photo.regionAdds = [];
+    photo.slotMerge = {};
+    photo.mergeSel = new Set();
     photo.strokePts = [];
     photo.undoStack = [];
     photo.redoStack = [];
@@ -1829,7 +1907,7 @@ function enterQuantStage() {
 // k-means実行: パレットと画素→スロットの割当マップを作る
 function recomputeQuant() {
   const img = photo.cutoutData;
-  photo.selectedSlot = -1;
+  photo.mergeSel = new Set();
   if (photo.quantK < 2 || !img) {
     photo.quantMap = null;
     photo.palette = [];
@@ -1868,18 +1946,45 @@ function recomputeQuant() {
   renderPaletteList();
 }
 
+// ---- スロット解決（まとめ・クリック追加領域を含む） ----
+// スロット番号: 0〜palette.length-1 = k-means色 / palette.length以降 = クリック追加色
+function slotCount() {
+  return photo.palette.length + photo.regionAdds.length;
+}
+function resolveSlot(i) {
+  let g = 0;
+  while (photo.slotMerge[i] !== undefined && g++ < 24) i = photo.slotMerge[i];
+  return i;
+}
+function slotBaseColor(i) {
+  return i < photo.palette.length
+    ? photo.palette[i]
+    : photo.regionAdds[i - photo.palette.length].rgb;
+}
 function slotColor(i) {
-  return photo.overrides[i] || photo.palette[i];
+  return photo.overrides[i] || slotBaseColor(i);
+}
+function isRegionSlot(i) {
+  return i >= photo.palette.length;
+}
+// 画素の実効スロット（クリック追加領域が最優先。後から追加したものが上）
+function pixelSlot(p) {
+  for (let ri = photo.regionAdds.length - 1; ri >= 0; ri--) {
+    if (photo.regionAdds[ri].mask[p]) return resolveSlot(photo.palette.length + ri);
+  }
+  const s = photo.quantMap[p];
+  return s < 0 ? -1 : resolveSlot(s);
 }
 
-// 減色（＋色差し替え）適用後の ImageData。減色なしなら切り抜きのコピー
+// 減色（＋色差し替え・まとめ・クリック追加）適用後の ImageData。減色なしなら切り抜きのコピー
 function quantizedImageData() {
   const img = photo.cutoutData;
   const out = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
   if (photo.quantMap) {
     const d = out.data;
     for (let p = 0; p < img.width * img.height; p++) {
-      const s = photo.quantMap[p];
+      if (d[p * 4 + 3] === 0) continue;
+      const s = pixelSlot(p);
       if (s < 0) continue;
       const c = slotColor(s);
       d[p * 4] = c[0]; d[p * 4 + 1] = c[1]; d[p * 4 + 2] = c[2];
@@ -1897,19 +2002,28 @@ function renderQuantCanvas() {
   qc.getContext("2d").putImageData(img, 0, 0);
 }
 
+function setQuantStatus(msg) {
+  $("quantStatus").textContent = msg || "";
+}
+
 function renderPaletteList() {
   const list = $("paletteList");
   list.innerHTML = "";
   $("paletteRow").style.display = photo.palette.length ? "block" : "none";
-  if (!photo.quantMap) return;
-  const counts = new Array(photo.palette.length).fill(0);
+  if (!photo.quantMap) { renderMergeBox(); return; }
+  // 実効スロットごとの画素数（構成比表示用）
+  const counts = new Array(slotCount()).fill(0);
   let total = 0;
   for (let p = 0; p < photo.quantMap.length; p++) {
-    if (photo.quantMap[p] >= 0) { counts[photo.quantMap[p]]++; total++; }
+    const s = pixelSlot(p);
+    if (s >= 0) { counts[s]++; total++; }
   }
-  photo.palette.forEach((_, i) => {
+  const mergedRoots = {};
+  Object.values(photo.slotMerge).forEach(root => { mergedRoots[resolveSlot(root)] = true; });
+  for (let i = 0; i < slotCount(); i++) {
+    if (resolveSlot(i) !== i) continue; // まとめられた色は表示しない
     const row = document.createElement("div");
-    row.className = "pal-row" + (photo.selectedSlot === i ? " sel" : "");
+    row.className = "pal-row" + (photo.mergeSel.has(i) ? " sel" : "");
     const c = slotColor(i);
     const sw = document.createElement("input");
     sw.type = "color";
@@ -1927,8 +2041,20 @@ function renderPaletteList() {
     row.appendChild(sw);
     const name = document.createElement("span");
     name.className = "pal-name";
-    name.textContent = `色${i + 1}`;
+    name.textContent = isRegionSlot(i) ? `追加色${i - photo.palette.length + 1}` : `色${i + 1}`;
     row.appendChild(name);
+    if (isRegionSlot(i)) {
+      const badge = document.createElement("span");
+      badge.className = "pal-badge";
+      badge.textContent = "クリック追加";
+      row.appendChild(badge);
+    }
+    if (mergedRoots[i]) {
+      const badge = document.createElement("span");
+      badge.className = "pal-badge";
+      badge.textContent = "まとめ中";
+      row.appendChild(badge);
+    }
     const edited = document.createElement("span");
     edited.className = "pal-edited";
     edited.textContent = photo.overrides[i] ? "変更済" : "";
@@ -1937,27 +2063,175 @@ function renderPaletteList() {
     share.className = "pal-share";
     share.textContent = total ? Math.round(counts[i] / total * 100) + "%" : "";
     row.appendChild(share);
-    row.addEventListener("click", () => selectSlot(i));
+    if (isRegionSlot(i)) {
+      const del = document.createElement("button");
+      del.className = "pal-del";
+      del.textContent = "けす";
+      del.title = "この追加色をもとに戻す";
+      del.addEventListener("click", e => {
+        e.stopPropagation();
+        removeRegion(i - photo.palette.length);
+      });
+      row.appendChild(del);
+    }
+    row.addEventListener("click", () => toggleMergeSel(i));
     list.appendChild(row);
+  }
+  renderMergeBox();
+}
+
+// 行クリックでまとめ対象の選択をトグル
+function toggleMergeSel(i) {
+  if (photo.mergeSel.has(i)) photo.mergeSel.delete(i);
+  else photo.mergeSel.add(i);
+  renderPaletteList();
+}
+
+// まとめUI: 2色以上選択で「どの色にまとめるか」を選ばせる
+function renderMergeBox() {
+  const box = $("mergeBox");
+  box.innerHTML = "";
+  const sel = [...photo.mergeSel].filter(i => resolveSlot(i) === i);
+  if (sel.length >= 2) {
+    const panel = document.createElement("div");
+    panel.className = "merge-panel";
+    const title = document.createElement("div");
+    title.className = "merge-title";
+    title.textContent = `えらんだ${sel.length}色を、どの色にまとめますか？`;
+    panel.appendChild(title);
+    const pick = document.createElement("div");
+    pick.className = "merge-pick";
+    sel.forEach(i => {
+      const b = document.createElement("button");
+      const c = slotColor(i);
+      b.innerHTML = `<span class="sw" style="background: rgb(${c.join(",")})"></span>` +
+        (isRegionSlot(i) ? `追加色${i - photo.palette.length + 1}` : `色${i + 1}`);
+      b.addEventListener("click", () => mergeInto(i));
+      pick.appendChild(b);
+    });
+    panel.appendChild(pick);
+    box.appendChild(panel);
+  }
+  if (Object.keys(photo.slotMerge).length) {
+    const un = document.createElement("button");
+    un.id = "unmergeAll";
+    un.textContent = "まとめをぜんぶもどす";
+    un.addEventListener("click", () => {
+      photo.slotMerge = {};
+      photo.mergeSel = new Set();
+      renderQuantCanvas();
+      renderPaletteList();
+      setQuantStatus("色のまとめをすべて解除しました。");
+    });
+    box.appendChild(un);
+  }
+}
+
+function mergeInto(root) {
+  [...photo.mergeSel].forEach(s => {
+    if (s !== root && resolveSlot(s) !== root) photo.slotMerge[resolveSlot(s)] = root;
   });
+  photo.mergeSel = new Set();
+  renderQuantCanvas();
+  renderPaletteList();
+  setQuantStatus("色をまとめました。「まとめをぜんぶもどす」で解除できます。");
 }
 
-function selectSlot(i) {
-  photo.selectedSlot = i;
-  [...$("paletteList").children].forEach((row, idx) => row.classList.toggle("sel", idx === i));
+function removeRegion(ri) {
+  // スロット番号が詰まるため、まとめ・差し替え・選択はリセットして整合を保つ
+  photo.regionAdds.splice(ri, 1);
+  photo.slotMerge = {};
+  photo.mergeSel = new Set();
+  const kept = {};
+  Object.keys(photo.overrides).forEach(k => { if (+k < photo.palette.length) kept[k] = photo.overrides[k]; });
+  photo.overrides = kept;
+  renderQuantCanvas();
+  renderPaletteList();
+  setQuantStatus("追加色をもとに戻しました。");
 }
 
-// プレビュークリックでその場所の色スロットを選択
+// ---- プレビュークリック: その場所の色を元画像から作って独立スロット化 ----
+// ペット刺繍メーカーの addRegionAt を移植（シード=クリック点3×3平均Lab、
+// T=15・距離上限つきBFS成長、シード色優先ブレンド）
 $("quantCanvas").addEventListener("click", e => {
-  if (!photo.quantMap) return;
+  if (!photo.quantMap || !photo.cutoutData) return;
   const qc = $("quantCanvas");
   const r = qc.getBoundingClientRect();
+  if (!r.width || !r.height) return;
   const x = Math.floor((e.clientX - r.left) / r.width * qc.width);
   const y = Math.floor((e.clientY - r.top) / r.height * qc.height);
   if (x < 0 || y < 0 || x >= qc.width || y >= qc.height) return;
-  const s = photo.quantMap[y * qc.width + x];
-  if (s >= 0) selectSlot(s);
+  addRegionAt(x, y);
 });
+
+function addRegionAt(cx, cy) {
+  const { width: w, height: h } = photo.cutoutData;
+  const alpha = photo.cutoutData.data;
+  if (alpha[(cy * w + cx) * 4 + 3] === 0) {
+    setQuantStatus("そこは背景です。オブジェクトの上をクリックしてください。");
+    return;
+  }
+  ensurePhotoLab();
+  const lab = photo.labData;
+  // シード色 = クリック点3×3の平均Lab（元画像）
+  let sl = 0, sa = 0, sb = 0, sn = 0;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const j = ny * w + nx;
+      sl += lab[j * 3]; sa += lab[j * 3 + 1]; sb += lab[j * 3 + 2]; sn++;
+    }
+  }
+  const seed = [sl / sn, sa / sn, sb / sn];
+  // 類似色BFS成長（T=15・距離上限つき。被写体の外へは広げない）
+  const T2 = 15 * 15;
+  const MAXD = Math.round(32 * Math.max(w, h) / SEG_N);
+  const depth = new Int16Array(w * h).fill(-1);
+  const queue = new Int32Array(w * h);
+  let qh = 0, qt = 0;
+  const start = cy * w + cx;
+  depth[start] = 0; queue[qt++] = start;
+  const mask = new Uint8Array(w * h);
+  let count = 0, al = 0, aa = 0, ab = 0;
+  while (qh < qt) {
+    const cur = queue[qh++];
+    mask[cur] = 1; count++;
+    al += lab[cur * 3]; aa += lab[cur * 3 + 1]; ab += lab[cur * 3 + 2];
+    const d0 = depth[cur];
+    if (d0 >= MAXD) continue;
+    const px = cur % w, py = (cur / w) | 0;
+    for (let k = 0; k < 4; k++) {
+      const nx = px + (k === 0 ? 1 : k === 1 ? -1 : 0);
+      const ny = py + (k === 2 ? 1 : k === 3 ? -1 : 0);
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const j = ny * w + nx;
+      if (depth[j] >= 0) continue;
+      if (alpha[j * 4 + 3] === 0) continue; // 被写体の外へは広げない
+      const dl = lab[j * 3] - seed[0], da = lab[j * 3 + 1] - seed[1], db = lab[j * 3 + 2] - seed[2];
+      if (2.4 * dl * dl + da * da + db * db > T2) continue;
+      depth[j] = d0 + 1;
+      queue[qt++] = j;
+    }
+  }
+  const minCount = Math.max(6, Math.round(6 * (Math.max(w, h) / SEG_N) ** 2));
+  if (count < minCount) {
+    setQuantStatus("うまく切り出せませんでした。もう少し色の中心をクリックしてください。");
+    return;
+  }
+  // 領域色 = クリック点の色（シード）を主、領域平均を従でブレンド
+  // （平均だけだと瞳孔の黒などに引っ張られて彩度が沈むため）
+  const avg = [al / count, aa / count, ab / count];
+  const mixed = [
+    seed[0] * 0.65 + avg[0] * 0.35,
+    seed[1] * 0.75 + avg[1] * 0.25,
+    seed[2] * 0.75 + avg[2] * 0.25,
+  ];
+  photo.regionAdds.push({ mask, rgb: lab2rgb(mixed[0], mixed[1], mixed[2]) });
+  renderQuantCanvas();
+  renderPaletteList();
+  setQuantStatus("この部分を独立した色にしました。いらなければパレットの「けす」でもどせます。");
+}
 
 // ---- 確定: 減色ステージの結果を既存パイプラインへ渡す ----
 function confirmQuant() {
@@ -2004,13 +2278,20 @@ $("quantBack").addEventListener("click", () => {
 });
 $("quantK").addEventListener("change", e => {
   photo.quantK = +e.target.value;
+  // スロット番号が変わるため、色差し替え・まとめは維持できずリセット（クリック追加色は保持）
   photo.overrides = {};
+  photo.slotMerge = {};
+  photo.mergeSel = new Set();
   if (photo.cutoutData) recomputeQuant();
 });
 $("paletteReset").addEventListener("click", () => {
   photo.overrides = {};
+  photo.slotMerge = {};
+  photo.regionAdds = [];
+  photo.mergeSel = new Set();
   renderQuantCanvas();
   renderPaletteList();
+  setQuantStatus("色調整（差し替え・まとめ・クリック追加）をすべてリセットしました。");
 });
 $("quantConfirm").addEventListener("click", confirmQuant);
 $("photoReedit").addEventListener("click", () => {
