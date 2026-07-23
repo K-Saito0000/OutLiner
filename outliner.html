@@ -281,6 +281,11 @@
         <input type="number" id="whiteShrink" min="-50" max="50" value="0">
         <div class="hint">プラス＝チョーク（輪郭より小さく／白のはみ出し防止）、マイナス＝スプレッド（輪郭より大きく／下地の白をはみ出させる）。拡張時はその分だけ切り出し範囲が全出力タイプ共通で自動的に広がるため、白版がはみ出して欠けることはありません。</div>
       </div>
+      <div class="control-row" id="outlineOffsetRow" style="display:none; margin-top:12px;">
+        <label for="outlineOffset">輪郭のオフセット（px）</label>
+        <input type="number" id="outlineOffset" min="-50" max="50" value="0">
+        <div class="hint">プラス＝外側（オブジェクトから離してカット／余白つきで切り出す）、マイナス＝内側（オブジェクトに食い込ませてカット）。外側オフセット時はその分だけ切り出し範囲が全出力タイプ共通で自動的に広がります。</div>
+      </div>
     </div>
 
     <div class="panel">
@@ -318,6 +323,7 @@ const state = {
   mode: "whole",       // "whole" | "each"
   outputType: "color", // "color" | "white" | "outline"
   whiteShrink: 0,      // 白版の調整量（px）: プラス=チョーク / マイナス=スプレッド
+  outlineOffset: 0,    // 輪郭のオフセット（px）: プラス=外側 / マイナス=内側
   targets: [],         // 現在の切り出し対象（renderResults で更新）
   // プレビュー合成レイヤー。配列の先頭 = 最前面。visible と opacity は個別に調整可
   layers: [
@@ -574,11 +580,11 @@ function selectedObjects() {
   return state.objects.filter(o => state.selected.has(o.label));
 }
 
-// 実効パディング: 白版をスプレッド（拡張）する場合は、はみ出さないよう
-// その分だけ切り出し範囲を自動で広げる。全出力タイプ共通で使うことで
-// カラー・白版・輪郭のキャンバスサイズが常に一致し、重ね合わせがズレない
+// 実効パディング: 白版のスプレッド（拡張）や輪郭の外側オフセットを使う場合は、
+// はみ出さないようその分だけ切り出し範囲を自動で広げる。全出力タイプ共通で
+// 使うことでカラー・白版・輪郭のキャンバスサイズが常に一致し、重ね合わせがズレない
 function effectivePad() {
-  return state.padding + Math.max(0, -state.whiteShrink);
+  return state.padding + Math.max(0, -state.whiteShrink, state.outlineOffset);
 }
 
 // ---------- マスク・白版・輪郭 ----------
@@ -731,6 +737,17 @@ function dpSimplify(pts, eps) {
   return a.concat(b.slice(1));
 }
 
+// 輪郭ループの生成: オフセット（プラス=外側に膨張 / マイナス=内側に収縮）を
+// 適用したマスクから境界をトレースする
+function outlineLoops(rect, labelSet) {
+  const { mask, ow, oh } = buildMask(rect, labelSet);
+  const off = state.outlineOffset;
+  const m = off > 0 ? dilateMask(mask, ow, oh, off)
+          : off < 0 ? erodeMask(mask, ow, oh, -off)
+          : mask;
+  return { loops: traceContours(m, ow, oh), ow, oh };
+}
+
 // レーザーカッター向けSVG（赤いカットパス、px単位）
 function loopsToSvg(loops, ow, oh) {
   const d = loops
@@ -823,8 +840,7 @@ function renderResults() {
         save: name => downloadCanvas(c, name),
       });
     } else {
-      const { mask, ow, oh } = buildMask(t.rect, t.labelSet);
-      const loops = traceContours(mask, ow, oh);
+      const { loops, ow, oh } = outlineLoops(t.rect, t.labelSet);
       const svg = loopsToSvg(loops, ow, oh);
       items.push({
         canvas: loopsToCanvas(loops, ow, oh), name: `${t.baseName}_outline.svg`,
@@ -879,8 +895,8 @@ function renderResults() {
 function makeLayerCanvas(t, key) {
   if (key === "color") return extract(t.rect, t.maskLabel);
   if (key === "white") return whiteCanvas(t.rect, t.labelSet);
-  const { mask, ow, oh } = buildMask(t.rect, t.labelSet);
-  return loopsToCanvas(traceContours(mask, ow, oh), ow, oh);
+  const { loops, ow, oh } = outlineLoops(t.rect, t.labelSet);
+  return loopsToCanvas(loops, ow, oh);
 }
 
 // プレビュー右側（元画像の隣）: 表示中レイヤーを不透明度つきで下から順に合成
@@ -1061,6 +1077,7 @@ function setOutputType(t) {
   $("typeOutline").classList.toggle("active", t === "outline");
   $("typeHint").textContent = TYPE_HINTS[t];
   $("whiteShrinkRow").style.display = t === "white" ? "block" : "none";
+  $("outlineOffsetRow").style.display = t === "outline" ? "block" : "none";
   // 選んだタイプのレイヤーはプレビューでも表示状態にする
   const layer = state.layers.find(l => l.key === t);
   if (layer && !layer.visible) {
@@ -1073,6 +1090,11 @@ function setOutputType(t) {
 $("whiteShrink").addEventListener("input", e => {
   state.whiteShrink = Math.max(-50, Math.min(50, +e.target.value || 0));
   // 白版はダウンロードリストだけでなく、プレビューのレイヤー表示にも影響する
+  if (state.imageData) renderResults();
+});
+
+$("outlineOffset").addEventListener("input", e => {
+  state.outlineOffset = Math.max(-50, Math.min(50, +e.target.value || 0));
   if (state.imageData) renderResults();
 });
 
