@@ -17,8 +17,9 @@
     --primary-bg: #eaf2fe;
     --primary-dark: #2563eb;
     --pink: #f06ba8;
-    --check-a: #e9edf4;
-    --check-b: #fbfcfe;
+    /* 透過部分の市松模様。白版（純白）が埋もれないよう暗めのグレーにする */
+    --check-a: #6b7280;
+    --check-b: #8b95a3;
     --shadow: 0 2px 10px rgba(50, 70, 120, .07);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -760,9 +761,9 @@ function renderPreview() {
   const pat = document.createElement("canvas");
   pat.width = pat.height = cell * 2;
   const pctx = pat.getContext("2d");
-  pctx.fillStyle = "#fbfcfe";
+  pctx.fillStyle = "#8b95a3";
   pctx.fillRect(0, 0, cell * 2, cell * 2);
-  pctx.fillStyle = "#e9edf4";
+  pctx.fillStyle = "#6b7280";
   pctx.fillRect(0, 0, cell, cell);
   pctx.fillRect(cell, cell, cell, cell);
   ctx.fillStyle = ctx.createPattern(pat, "repeat");
