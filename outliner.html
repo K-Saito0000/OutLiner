@@ -307,7 +307,7 @@
   .check-label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
   .check-label input { accent-color: var(--primary); }
   #quantStage { margin-bottom: 16px; }
-  #quantCanvas { max-width: 100%; max-height: 64vh; cursor: crosshair; }
+  #quantCanvas { max-width: 100%; max-height: 64vh; cursor: crosshair; touch-action: none; }
   #paletteList { display: flex; flex-direction: column; gap: 6px; }
   .pal-row {
     display: flex; align-items: center; gap: 9px;
@@ -482,12 +482,25 @@
         </select>
         <div class="hint">UVプリントのインキ層分けやレーザー彫刻の段階分けに使えます。</div>
       </div>
+      <div class="control-row">
+        <label>色を追加（なぞった範囲から）</label>
+        <div class="mode-toggle">
+          <button id="regionClick" class="active">クリック</button>
+          <button id="regionBrush">ブラシ</button>
+        </div>
+        <div class="hint" id="regionModeHint">クリックした場所の色を、元画像から作って独立した色に追加します。</div>
+      </div>
+      <div class="control-row" id="regionBrushRow" style="display:none">
+        <label>ブラシサイズ <span class="val" id="regionBrushSizeVal">28</span></label>
+        <input type="range" id="regionBrushSize" min="6" max="120" value="28">
+        <label class="check-label" style="margin-top:8px"><input type="checkbox" id="regionSmart" checked> にた色まで広げる</label>
+        <div class="hint">ONでなぞった範囲の色に似た周囲まで自動で含めます。OFFならなぞった範囲だけを新しい色にします。</div>
+      </div>
       <div class="control-row" id="paletteRow">
         <label>パレット</label>
         <div id="paletteList"></div>
         <div id="mergeBox"></div>
         <div class="hint">
-          <b>プレビューをクリック</b>すると、その場所の色を元画像から作って独立した色に追加できます（目・模様などの救済）。<br>
           <b>パレットの行をクリック</b>して2色以上選ぶと、ひとつの色にまとめられます。スウォッチで色の差し替えも可能です。
         </div>
       </div>
@@ -1417,9 +1430,14 @@ const photo = {
   quantMap: null,     // Int32Array(w*h) 画素→パレットスロット（-1=透明）
   palette: [],        // k-meansで得たパレット [[r,g,b],...]
   overrides: {},      // スロットごとの色差し替え {slot: [r,g,b]}
-  regionAdds: [],     // クリック追加した独立色 [{mask: Uint8Array, rgb: [r,g,b]}]
+  regionAdds: [],     // 追加した独立色 [{mask: Uint8Array, rgb: [r,g,b]}]
   slotMerge: {},      // 色まとめ: 子スロット→親スロット
   mergeSel: new Set(),// まとめ対象として選択中のスロット
+  regionMode: "click",// 色追加の方法: "click" | "brush"
+  regionBrushSize: 28,
+  regionSmart: true,  // ブラシ: なぞった色に似た周囲まで広げる
+  regionPts: [],      // なぞり中のストローク点列（減色プレビュー座標）
+  regionPainting: false,
   session: null,
   painting: false,
   renderQueued: false,
@@ -1999,7 +2017,18 @@ function renderQuantCanvas() {
   const img = quantizedImageData();
   qc.width = img.width;
   qc.height = img.height;
-  qc.getContext("2d").putImageData(img, 0, 0);
+  const ctx = qc.getContext("2d");
+  ctx.putImageData(img, 0, 0);
+  // なぞり中のストローク表示
+  if (photo.regionPainting && photo.regionPts.length) {
+    const rad = regionBrushRadius();
+    ctx.fillStyle = "rgba(59,130,246,.45)";
+    photo.regionPts.forEach(([px, py]) => {
+      ctx.beginPath();
+      ctx.arc(px, py, rad, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
 }
 
 function setQuantStatus(msg) {
@@ -2150,76 +2179,161 @@ function removeRegion(ri) {
   setQuantStatus("追加色をもとに戻しました。");
 }
 
-// ---- プレビュークリック: その場所の色を元画像から作って独立スロット化 ----
-// ペット刺繍メーカーの addRegionAt を移植（シード=クリック点3×3平均Lab、
+// ---- プレビュー操作: クリック／ブラシで色を追加 ----
+// ペット刺繍メーカーの addRegionAt を移植・一般化（シード=指定点の平均Lab、
 // T=15・距離上限つきBFS成長、シード色優先ブレンド）
-$("quantCanvas").addEventListener("click", e => {
+const quantCanvas = $("quantCanvas");
+
+function regionBrushRadius() {
+  const r = quantCanvas.getBoundingClientRect();
+  if (!r.width) return photo.regionBrushSize;
+  return photo.regionBrushSize * (quantCanvas.width / r.width); // 表示px→画像px換算
+}
+function quantPointFromEvent(e) {
+  const r = quantCanvas.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  return [
+    (e.clientX - r.left) / r.width * quantCanvas.width,
+    (e.clientY - r.top) / r.height * quantCanvas.height,
+  ];
+}
+
+quantCanvas.addEventListener("pointerdown", e => {
   if (!photo.quantMap || !photo.cutoutData) return;
-  const qc = $("quantCanvas");
-  const r = qc.getBoundingClientRect();
-  if (!r.width || !r.height) return;
-  const x = Math.floor((e.clientX - r.left) / r.width * qc.width);
-  const y = Math.floor((e.clientY - r.top) / r.height * qc.height);
-  if (x < 0 || y < 0 || x >= qc.width || y >= qc.height) return;
+  if (photo.regionMode !== "brush") return;
+  e.preventDefault();
+  quantCanvas.setPointerCapture(e.pointerId);
+  photo.regionPainting = true;
+  photo.regionPts = [];
+  const p = quantPointFromEvent(e);
+  if (p) { photo.regionPts.push(p); renderQuantCanvas(); }
+});
+quantCanvas.addEventListener("pointermove", e => {
+  if (!photo.regionPainting) return;
+  const p = quantPointFromEvent(e);
+  if (p) { photo.regionPts.push(p); renderQuantCanvas(); }
+});
+["pointerup", "pointercancel"].forEach(ev =>
+  quantCanvas.addEventListener(ev, () => {
+    if (!photo.regionPainting) return;
+    photo.regionPainting = false;
+    applyRegionStroke();
+  }));
+
+quantCanvas.addEventListener("click", e => {
+  if (!photo.quantMap || !photo.cutoutData) return;
+  if (photo.regionMode !== "click") return;
+  const p = quantPointFromEvent(e);
+  if (!p) return;
+  const x = Math.floor(p[0]), y = Math.floor(p[1]);
+  if (x < 0 || y < 0 || x >= quantCanvas.width || y >= quantCanvas.height) return;
   addRegionAt(x, y);
 });
 
-function addRegionAt(cx, cy) {
+// なぞった範囲のシード画素を集めて色を追加
+function applyRegionStroke() {
+  if (!photo.regionPts.length || !photo.cutoutData) return;
   const { width: w, height: h } = photo.cutoutData;
   const alpha = photo.cutoutData.data;
-  if (alpha[(cy * w + cx) * 4 + 3] === 0) {
+  const rad = regionBrushRadius();
+  const r2 = rad * rad;
+  const seedMask = new Uint8Array(w * h);
+  const seeds = [];
+  photo.regionPts.forEach(([px, py]) => {
+    const x0 = Math.max(0, Math.floor(px - rad)), x1 = Math.min(w - 1, Math.ceil(px + rad));
+    const y0 = Math.max(0, Math.floor(py - rad)), y1 = Math.min(h - 1, Math.ceil(py + rad));
+    for (let yy = y0; yy <= y1; yy++) {
+      for (let xx = x0; xx <= x1; xx++) {
+        const p = yy * w + xx;
+        if (seedMask[p] || alpha[p * 4 + 3] === 0) continue;   // 背景は含めない
+        if ((xx - px) ** 2 + (yy - py) ** 2 > r2) continue;
+        seedMask[p] = 1;
+        seeds.push(p);
+      }
+    }
+  });
+  photo.regionPts = [];
+  if (!seeds.length) {
+    setQuantStatus("そこは背景です。オブジェクトの上をなぞってください。");
+    renderQuantCanvas();
+    return;
+  }
+  addRegionFromSeeds(seeds, seedMask, photo.regionSmart);
+}
+
+// クリック: 指定点3×3をシードにして領域成長（従来どおり）
+function addRegionAt(cx, cy) {
+  const { width: w, height: h } = photo.cutoutData;
+  if (photo.cutoutData.data[(cy * w + cx) * 4 + 3] === 0) {
     setQuantStatus("そこは背景です。オブジェクトの上をクリックしてください。");
     return;
   }
-  ensurePhotoLab();
-  const lab = photo.labData;
-  // シード色 = クリック点3×3の平均Lab（元画像）
-  let sl = 0, sa = 0, sb = 0, sn = 0;
+  const seedMask = new Uint8Array(w * h);
+  const seeds = [];
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
       const nx = cx + dx, ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      const j = ny * w + nx;
-      sl += lab[j * 3]; sa += lab[j * 3 + 1]; sb += lab[j * 3 + 2]; sn++;
+      const p = ny * w + nx;
+      if (photo.cutoutData.data[p * 4 + 3] === 0) continue;
+      seedMask[p] = 1;
+      seeds.push(p);
     }
   }
-  const seed = [sl / sn, sa / sn, sb / sn];
-  // 類似色BFS成長（T=15・距離上限つき。被写体の外へは広げない）
-  const T2 = 15 * 15;
-  const MAXD = Math.round(32 * Math.max(w, h) / SEG_N);
-  const depth = new Int16Array(w * h).fill(-1);
-  const queue = new Int32Array(w * h);
-  let qh = 0, qt = 0;
-  const start = cy * w + cx;
-  depth[start] = 0; queue[qt++] = start;
-  const mask = new Uint8Array(w * h);
-  let count = 0, al = 0, aa = 0, ab = 0;
-  while (qh < qt) {
-    const cur = queue[qh++];
-    mask[cur] = 1; count++;
-    al += lab[cur * 3]; aa += lab[cur * 3 + 1]; ab += lab[cur * 3 + 2];
-    const d0 = depth[cur];
-    if (d0 >= MAXD) continue;
-    const px = cur % w, py = (cur / w) | 0;
-    for (let k = 0; k < 4; k++) {
-      const nx = px + (k === 0 ? 1 : k === 1 ? -1 : 0);
-      const ny = py + (k === 2 ? 1 : k === 3 ? -1 : 0);
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      const j = ny * w + nx;
-      if (depth[j] >= 0) continue;
-      if (alpha[j * 4 + 3] === 0) continue; // 被写体の外へは広げない
-      const dl = lab[j * 3] - seed[0], da = lab[j * 3 + 1] - seed[1], db = lab[j * 3 + 2] - seed[2];
-      if (2.4 * dl * dl + da * da + db * db > T2) continue;
-      depth[j] = d0 + 1;
-      queue[qt++] = j;
+  addRegionFromSeeds(seeds, seedMask, true);
+}
+
+// シード画素群 → （任意で類似色BFS成長）→ 独立スロットとして追加
+function addRegionFromSeeds(seeds, seedMask, grow) {
+  const { width: w, height: h } = photo.cutoutData;
+  const alpha = photo.cutoutData.data;
+  ensurePhotoLab();
+  const lab = photo.labData;
+  // シード色 = シード画素の平均Lab（元画像）
+  let sl = 0, sa = 0, sb = 0;
+  seeds.forEach(p => { sl += lab[p * 3]; sa += lab[p * 3 + 1]; sb += lab[p * 3 + 2]; });
+  const seed = [sl / seeds.length, sa / seeds.length, sb / seeds.length];
+
+  let mask = seedMask, count = seeds.length;
+  let al = sl, aa = sa, ab = sb;
+  if (grow) {
+    // 類似色BFS成長（T=15・距離上限つき。被写体の外へは広げない）
+    const T2 = 15 * 15;
+    const MAXD = Math.round(32 * Math.max(w, h) / SEG_N);
+    const depth = new Int16Array(w * h).fill(-1);
+    const queue = new Int32Array(w * h);
+    let qh = 0, qt = 0;
+    mask = new Uint8Array(w * h);
+    count = 0; al = 0; aa = 0; ab = 0;
+    seeds.forEach(p => { depth[p] = 0; queue[qt++] = p; });
+    while (qh < qt) {
+      const cur = queue[qh++];
+      mask[cur] = 1; count++;
+      al += lab[cur * 3]; aa += lab[cur * 3 + 1]; ab += lab[cur * 3 + 2];
+      const d0 = depth[cur];
+      if (d0 >= MAXD) continue;
+      const px = cur % w, py = (cur / w) | 0;
+      for (let k = 0; k < 4; k++) {
+        const nx = px + (k === 0 ? 1 : k === 1 ? -1 : 0);
+        const ny = py + (k === 2 ? 1 : k === 3 ? -1 : 0);
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (depth[j] >= 0) continue;
+        if (alpha[j * 4 + 3] === 0) continue; // 被写体の外へは広げない
+        const dl = lab[j * 3] - seed[0], da = lab[j * 3 + 1] - seed[1], db = lab[j * 3 + 2] - seed[2];
+        if (2.4 * dl * dl + da * da + db * db > T2) continue;
+        depth[j] = d0 + 1;
+        queue[qt++] = j;
+      }
     }
   }
   const minCount = Math.max(6, Math.round(6 * (Math.max(w, h) / SEG_N) ** 2));
   if (count < minCount) {
-    setQuantStatus("うまく切り出せませんでした。もう少し色の中心をクリックしてください。");
+    setQuantStatus("うまく切り出せませんでした。もう少し広く、色の中心をなぞってください。");
+    renderQuantCanvas();
     return;
   }
-  // 領域色 = クリック点の色（シード）を主、領域平均を従でブレンド
+  // 領域色 = 指定した場所の色（シード）を主、領域平均を従でブレンド
   // （平均だけだと瞳孔の黒などに引っ張られて彩度が沈むため）
   const avg = [al / count, aa / count, ab / count];
   const mixed = [
@@ -2230,7 +2344,7 @@ function addRegionAt(cx, cy) {
   photo.regionAdds.push({ mask, rgb: lab2rgb(mixed[0], mixed[1], mixed[2]) });
   renderQuantCanvas();
   renderPaletteList();
-  setQuantStatus("この部分を独立した色にしました。いらなければパレットの「けす」でもどせます。");
+  setQuantStatus(`この部分（${count.toLocaleString()}px）を独立した色にしました。いらなければパレットの「けす」でもどせます。`);
 }
 
 // ---- 確定: 減色ステージの結果を既存パイプラインへ渡す ----
@@ -2293,6 +2407,22 @@ $("paletteReset").addEventListener("click", () => {
   renderPaletteList();
   setQuantStatus("色調整（差し替え・まとめ・クリック追加）をすべてリセットしました。");
 });
+$("regionClick").addEventListener("click", () => setRegionMode("click"));
+$("regionBrush").addEventListener("click", () => setRegionMode("brush"));
+function setRegionMode(m) {
+  photo.regionMode = m;
+  $("regionClick").classList.toggle("active", m === "click");
+  $("regionBrush").classList.toggle("active", m === "brush");
+  $("regionBrushRow").style.display = m === "brush" ? "block" : "none";
+  $("regionModeHint").textContent = m === "click"
+    ? "クリックした場所の色を、元画像から作って独立した色に追加します。"
+    : "なぞった範囲の色を、元画像から作って独立した色に追加します。広い範囲や複数の場所をまとめて指定できます。";
+}
+$("regionBrushSize").addEventListener("input", e => {
+  photo.regionBrushSize = +e.target.value;
+  $("regionBrushSizeVal").textContent = photo.regionBrushSize;
+});
+$("regionSmart").addEventListener("change", e => { photo.regionSmart = e.target.checked; });
 $("quantConfirm").addEventListener("click", confirmQuant);
 $("photoReedit").addEventListener("click", () => {
   $("photoStage").style.display = "block";
