@@ -464,6 +464,7 @@
         <button id="segRerunBtn" class="layer-btn">AI切り抜きをやり直す</button>
       </div>
       <button id="photoConfirm" class="dl-btn">減色へ進む</button>
+      <button id="photoSkipQuant" class="nav-btn" style="width:100%; margin-top:8px">減色をスキップして切り出しへ →</button>
     </div>
   </div>
 </div>
@@ -508,6 +509,7 @@
         <label>指定した範囲の色</label>
         <div class="mode-toggle">
           <button id="fillOriginal" class="active">元画像のまま</button>
+          <button id="fillTint">質感そのまま</button>
           <button id="fillSolid">単色にする</button>
         </div>
         <div class="hint" id="regionFillHint">指定した範囲は減色せず、元画像の色をそのまま再現します（顔まわりだけフルカラーで残す、など）。</div>
@@ -1446,9 +1448,9 @@ const photo = {
   quantMap: null,     // Int32Array(w*h) 画素→パレットスロット（-1=透明）
   palette: [],        // k-meansで得たパレット [[r,g,b],...]
   overrides: {},      // スロットごとの色差し替え {slot: [r,g,b]}
-  // 追加した領域 [{mask, rgb}]（単色）または [{mask, original:true}]（元画像の色のまま）
+  // 追加した領域。原画=[{mask, original:true}] / 質感=[{mask, rgb, tint:true}] / 単色=[{mask, rgb}]
   regionAdds: [],
-  regionFill: "original", // 指定範囲の扱い: "original"（減色しない）| "solid"（単色）
+  regionFill: "original", // 指定範囲の扱い: "original"（減色しない）| "tint"（質感そのまま）| "solid"（単色）
   slotMerge: {},      // 色まとめ: 子スロット→親スロット
   mergeSel: new Set(),// まとめ対象として選択中のスロット
   regionMode: "click",// 範囲の指定方法: "click" | "brush"
@@ -1877,6 +1879,32 @@ function lab2rgb(L, a, b) {
     lin2srgb(0.0557 * X - 0.2040 * Y + 1.0570 * Z),
   ];
 }
+// 指定のLabがsRGBの色域に収まるか（クリップされないか）
+function labInGamut(L, a, b) {
+  const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+  const fi = t => { const t3 = t * t * t; return t3 > 0.008856 ? t3 : (t - 16 / 116) / 7.787; };
+  const X = fi(fx) * 0.95047, Y = fi(fy), Z = fi(fz) * 1.08883;
+  const r = 3.2406 * X - 1.5372 * Y - 0.4986 * Z;
+  const g = -0.9689 * X + 1.8758 * Y + 0.0415 * Z;
+  const bl = 0.0557 * X - 0.2040 * Y + 1.0570 * Z;
+  const ok = v => v >= -0.002 && v <= 1.002;
+  return ok(r) && ok(g) && ok(bl);
+}
+// 明度Lごとに、色み(a,b)をどこまで乗せられるかの倍率（色域外の濁りを防ぐ）
+function chromaScaleTable(a, b) {
+  const tbl = new Float32Array(101);
+  for (let L = 0; L <= 100; L++) {
+    if (labInGamut(L, a, b)) { tbl[L] = 1; continue; }
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 12; i++) {
+      const mid = (lo + hi) / 2;
+      if (labInGamut(L, a * mid, b * mid)) lo = mid; else hi = mid;
+    }
+    tbl[L] = lo;
+  }
+  return tbl;
+}
+
 // 明度差を2.4倍重み付けした距離（2乗値）
 function labDist2(p, q) {
   const dL = p[0] - q[0], da = p[1] - q[1], db = p[2] - q[2];
@@ -1945,8 +1973,10 @@ function recomputeQuant() {
   const img = photo.cutoutData;
   photo.mergeSel = new Set();
   if (photo.quantK < 2 || !img) {
+    // 減色しない: パレットは持たないが、指定した範囲（原画・質感・単色）は使える
     photo.quantMap = null;
     photo.palette = [];
+    setQuantStatus(img ? "減色しません。範囲を指定して色を調整することはできます。" : "");
     renderQuantCanvas();
     renderPaletteList();
     return;
@@ -2011,11 +2041,17 @@ function isOriginalSlot(i) {
   const reg = regionOfSlot(i);
   return !!(reg && reg.original && !photo.overrides[i]);
 }
+// 質感（明暗）を残したまま色みだけ揃える領域か
+function isTintSlot(i) {
+  const reg = regionOfSlot(i);
+  return !!(reg && reg.tint);
+}
 // 画素の実効スロット（クリック追加領域が最優先。後から追加したものが上）
 function pixelSlot(p) {
   for (let ri = photo.regionAdds.length - 1; ri >= 0; ri--) {
     if (photo.regionAdds[ri].mask[p]) return resolveSlot(photo.palette.length + ri);
   }
+  if (!photo.quantMap) return -1; // 減色しない場合はパレットスロットを持たない
   const s = photo.quantMap[p];
   return s < 0 ? -1 : resolveSlot(s);
 }
@@ -2024,14 +2060,29 @@ function pixelSlot(p) {
 function quantizedImageData() {
   const img = photo.cutoutData;
   const out = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
-  if (photo.quantMap) {
+  if (photo.quantMap || photo.regionAdds.length) {
     const d = out.data;
+    const tintLabCache = {}; // スロットごとの目標色み（a,b）
     for (let p = 0; p < img.width * img.height; p++) {
       if (d[p * 4 + 3] === 0) continue;
       const s = pixelSlot(p);
       if (s < 0) continue;
       if (isOriginalSlot(s)) continue; // 元画像の色をそのまま残す
       const c = slotColor(s);
+      if (isTintSlot(s)) {
+        // 質感そのまま: 明度(L)は元画像を保ち、色み(a,b)だけ代表色に揃える。
+        // 明部・暗部は色域外になるため、Lごとの上限倍率で色みを抑える
+        if (!tintLabCache[s]) {
+          const lab = rgb2lab(c[0], c[1], c[2]);
+          tintLabCache[s] = { lab, tbl: chromaScaleTable(lab[1], lab[2]) };
+        }
+        const { lab: t, tbl } = tintLabCache[s];
+        const src = rgb2lab(img.data[p * 4], img.data[p * 4 + 1], img.data[p * 4 + 2]);
+        const k = tbl[Math.max(0, Math.min(100, Math.round(src[0])))];
+        const rgb = lab2rgb(src[0], t[1] * k, t[2] * k);
+        d[p * 4] = rgb[0]; d[p * 4 + 1] = rgb[1]; d[p * 4 + 2] = rgb[2];
+        continue;
+      }
       d[p * 4] = c[0]; d[p * 4 + 1] = c[1]; d[p * 4 + 2] = c[2];
     }
   }
@@ -2065,14 +2116,19 @@ function setQuantStatus(msg) {
 function renderPaletteList() {
   const list = $("paletteList");
   list.innerHTML = "";
-  $("paletteRow").style.display = photo.palette.length ? "block" : "none";
-  if (!photo.quantMap) { renderMergeBox(); return; }
+  const hasSlots = photo.palette.length || photo.regionAdds.length;
+  $("paletteRow").style.display = hasSlots ? "block" : "none";
+  if (!hasSlots) { renderMergeBox(); return; }
   // 実効スロットごとの画素数（構成比表示用）
   const counts = new Array(slotCount()).fill(0);
   let total = 0;
-  for (let p = 0; p < photo.quantMap.length; p++) {
+  const n = photo.cutoutData.width * photo.cutoutData.height;
+  const alpha = photo.cutoutData.data;
+  for (let p = 0; p < n; p++) {
+    if (alpha[p * 4 + 3] === 0) continue;
     const s = pixelSlot(p);
-    if (s >= 0) { counts[s]++; total++; }
+    if (s >= 0) counts[s]++;
+    total++;
   }
   const mergedRoots = {};
   Object.values(photo.slotMerge).forEach(root => { mergedRoots[resolveSlot(root)] = true; });
@@ -2101,16 +2157,19 @@ function renderPaletteList() {
       });
       row.appendChild(sw);
     }
+    const tint = isTintSlot(i);
     const name = document.createElement("span");
     name.className = "pal-name";
     name.textContent = isRegionSlot(i)
-      ? (orig ? `原画エリア${i - photo.palette.length + 1}` : `追加色${i - photo.palette.length + 1}`)
+      ? (orig ? `原画エリア${i - photo.palette.length + 1}`
+             : tint ? `質感エリア${i - photo.palette.length + 1}`
+             : `追加色${i - photo.palette.length + 1}`)
       : `色${i + 1}`;
     row.appendChild(name);
     if (isRegionSlot(i)) {
       const badge = document.createElement("span");
       badge.className = "pal-badge";
-      badge.textContent = orig ? "元画像のまま" : "単色追加";
+      badge.textContent = orig ? "元画像のまま" : tint ? "質感そのまま" : "単色追加";
       row.appendChild(badge);
     }
     if (mergedRoots[i]) {
@@ -2275,7 +2334,7 @@ function quantPointFromEvent(e) {
 }
 
 quantCanvas.addEventListener("pointerdown", e => {
-  if (!photo.quantMap || !photo.cutoutData) return;
+  if (!photo.cutoutData) return;
   if (photo.regionMode !== "brush") return;
   e.preventDefault();
   quantCanvas.setPointerCapture(e.pointerId);
@@ -2297,7 +2356,7 @@ quantCanvas.addEventListener("pointermove", e => {
   }));
 
 quantCanvas.addEventListener("click", e => {
-  if (!photo.quantMap || !photo.cutoutData) return;
+  if (!photo.cutoutData) return;
   if (photo.regionMode !== "click") return;
   const p = quantPointFromEvent(e);
   if (!p) return;
@@ -2422,8 +2481,14 @@ function addRegionFromSeeds(seeds, seedMask, grow) {
       seed[1] * 0.75 + avg[1] * 0.25,
       seed[2] * 0.75 + avg[2] * 0.25,
     ];
-    photo.regionAdds.push({ mask, rgb: lab2rgb(mixed[0], mixed[1], mixed[2]) });
-    setQuantStatus(`この範囲（${count.toLocaleString()}px）を独立した色にしました。いらなければパレットの「けす」でもどせます。`);
+    const rgb = lab2rgb(mixed[0], mixed[1], mixed[2]);
+    if (photo.regionFill === "tint") {
+      photo.regionAdds.push({ mask, rgb, tint: true });
+      setQuantStatus(`この範囲（${count.toLocaleString()}px）は質感を残したまま色みをまとめました。スウォッチで色みを調整できます。`);
+    } else {
+      photo.regionAdds.push({ mask, rgb });
+      setQuantStatus(`この範囲（${count.toLocaleString()}px）を独立した色にしました。いらなければパレットの「けす」でもどせます。`);
+    }
   }
   renderQuantCanvas();
   renderPaletteList();
@@ -2467,6 +2532,19 @@ $("brushSmart").addEventListener("change", e => { photo.brushSmart = e.target.ch
 
 // ステップ間ナビゲーション（切り抜き ⇄ 減色 ⇄ 切り出し）
 $("photoConfirm").addEventListener("click", enterQuantStage);
+// 減色をスキップ: 色数を「減色しない」にして切り抜きのまま切り出しへ進む
+$("photoSkipQuant").addEventListener("click", () => {
+  if (!photo.mask) return;
+  photo.quantK = 0;
+  $("quantK").value = "0";
+  photo.overrides = {};
+  photo.slotMerge = {};
+  photo.regionAdds = [];
+  photo.mergeSel = new Set();
+  photo.cutoutData = buildCutoutData();
+  recomputeQuant();
+  confirmQuant();
+});
 $("quantBack").addEventListener("click", () => {
   $("quantStage").style.display = "none";
   $("photoStage").style.display = "block";
@@ -2501,14 +2579,19 @@ function setRegionMode(m) {
     : "なぞって範囲を選びます。広い範囲や複数の場所をまとめて指定できます。";
 }
 $("fillOriginal").addEventListener("click", () => setRegionFill("original"));
+$("fillTint").addEventListener("click", () => setRegionFill("tint"));
 $("fillSolid").addEventListener("click", () => setRegionFill("solid"));
+const FILL_HINTS = {
+  original: "指定した範囲は減色せず、元画像の色をそのまま再現します（顔まわりだけフルカラーで残す、など）。",
+  tint: "明暗（質感）は元画像のまま残し、色みだけを元画像に近い1色に揃えます。スウォッチで色みを調整できます。",
+  solid: "指定した範囲を、その場所の代表色1色で塗ります（目・模様などを1色として扱いたいとき）。",
+};
 function setRegionFill(f) {
   photo.regionFill = f;
   $("fillOriginal").classList.toggle("active", f === "original");
+  $("fillTint").classList.toggle("active", f === "tint");
   $("fillSolid").classList.toggle("active", f === "solid");
-  $("regionFillHint").textContent = f === "original"
-    ? "指定した範囲は減色せず、元画像の色をそのまま再現します（顔まわりだけフルカラーで残す、など）。"
-    : "指定した範囲を、その場所の代表色1色で塗ります（目・模様などを1色として扱いたいとき）。";
+  $("regionFillHint").textContent = FILL_HINTS[f];
 }
 $("regionBrushSize").addEventListener("input", e => {
   photo.regionBrushSize = +e.target.value;
