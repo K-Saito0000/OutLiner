@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OutLiner の使い方</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="description" content="OutLinerの使い方ガイド。透過PNG／写真のAI切り抜き、減色と色の調整、レーザーカッター用の輪郭SVG・UVプリンター用の白版PNGの書き出しまでを解説します。">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="OutLiner">
+<meta property="og:title" content="OutLiner の使い方">
+<meta property="og:description" content="透過PNG／写真のAI切り抜き、減色と色の調整、レーザーカッター用の輪郭SVG・UVプリンター用の白版PNGの書き出しまでを解説します。">
+<meta property="og:url" content="https://k-saito0000.github.io/OutLiner/how-to-use.html">
+<meta property="og:image" content="https://k-saito0000.github.io/OutLiner/ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="OutLiner の使い方">
+<meta name="twitter:description" content="AI切り抜きから加工データの書き出しまでの手順ガイド。">
+<meta name="twitter:image" content="https://k-saito0000.github.io/OutLiner/ogp.png">
+<style>
+  :root {
+    --bg: #eef2f8;
+    --card: #ffffff;
+    --card2: #f5f8fc;
+    --border: #dfe6ef;
+    --text: #273444;
+    --muted: #8492a6;
+    --primary: #3b82f6;
+    --primary-bg: #eaf2fe;
+    --primary-dark: #2563eb;
+    --pink: #f06ba8;
+    --shadow: 0 2px 10px rgba(50, 70, 120, .07);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
+    min-height: 100vh;
+    padding: 18px;
+    max-width: 980px;
+    margin: 0 auto;
+    line-height: 1.75;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 14px 20px;
+    margin-bottom: 16px;
+  }
+  header .logo {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    padding: 4px;
+    background: var(--card);
+  }
+  header h1 { font-size: 22px; font-weight: 800; letter-spacing: .02em; }
+  header h1 span { color: var(--primary); }
+  header p { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  header .spacer { flex: 1; }
+  .open-btn {
+    background: var(--primary);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 10px 16px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .open-btn:hover { background: var(--primary-dark); }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 22px;
+    margin-bottom: 16px;
+  }
+  .panel > h2 {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 17px; font-weight: 700; margin-bottom: 14px;
+  }
+  .step {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    font-size: 12.5px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 14px; font-weight: 700; margin: 18px 0 6px; }
+  h3:first-of-type { margin-top: 6px; }
+  p, li { font-size: 13.5px; }
+  ul, ol { margin: 6px 0 0 20px; }
+  li { margin-bottom: 5px; }
+  .lead { color: var(--muted); font-size: 13.5px; margin-bottom: 12px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--card2); font-weight: 700; white-space: nowrap; }
+
+  .note {
+    background: var(--primary-bg);
+    border: 1.5px solid var(--primary);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+    margin: 12px 0;
+  }
+  .note b { color: var(--primary-dark); }
+  .warn {
+    background: #fff4f4;
+    border: 1.5px solid #f0a0a0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+    margin: 12px 0;
+  }
+  code {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 12.5px;
+  }
+  pre {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 8px 0;
+  }
+  pre code { background: none; border: none; padding: 0; }
+
+  .flow {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 10px 0;
+  }
+  .flow .box {
+    background: var(--card);
+    border: 1.5px solid var(--primary);
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--primary-dark);
+  }
+  .flow .arrow { color: var(--muted); font-weight: 400; }
+
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; }
+  .toc a {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 13px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .toc a:hover { border-color: var(--primary); color: var(--primary-dark); }
+
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 0 24px; }
+  footer a { color: var(--primary-dark); }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="favicon.svg" alt="" class="logo">
+  <div>
+    <h1>Out<span>Liner</span> の使い方</h1>
+    <p>画像からレーザーカッター・UVプリンター用の加工データをつくる</p>
+  </div>
+  <div class="spacer"></div>
+  <a class="open-btn" href="outliner.html">アプリを開く →</a>
+</header>
+
+<div class="panel">
+  <h2>このツールでできること</h2>
+  <p>画像から不要な背景を取り除いてオブジェクトを切り出し、そのまま加工機用のデータを書き出します。処理はすべてブラウザの中で完結し、画像がサーバーへ送られることはありません。</p>
+  <div class="flow">
+    <span class="box">画像を読み込む</span>
+    <span class="arrow">→</span>
+    <span class="box">切り抜く</span>
+    <span class="arrow">→</span>
+    <span class="box">色を調整（任意）</span>
+    <span class="arrow">→</span>
+    <span class="box">切り出して書き出す</span>
+  </div>
+  <p>書き出せるのは次の3種類です。3つとも同じキャンバスサイズで出力されるので、重ねても位置がずれません。</p>
+  <table>
+    <tr><th>出力</th><th>用途</th><th>形式</th></tr>
+    <tr><td>カラーPNG</td><td>通常の切り出し画像・UVプリントのカラー版</td><td>透明背景つきPNG</td></tr>
+    <tr><td>白版PNG</td><td>UVプリンターの白インキ層</td><td>白ベタPNG</td></tr>
+    <tr><td>輪郭SVG</td><td>レーザーカッターのカットパス</td><td>赤線のベクターSVG（px単位）</td></tr>
+  </table>
+  <div class="toc" style="margin-top:14px">
+    <a href="#start">1. はじめかた</a>
+    <a href="#png">2. 透過PNGモード</a>
+    <a href="#photo">3. 写真モード（AI切り抜き）</a>
+    <a href="#quant">4. 減色と色の調整</a>
+    <a href="#cut">5. 切り出しと書き出し</a>
+    <a href="#tips">6. 加工機に渡すときの注意</a>
+  </div>
+</div>
+
+<div class="panel" id="start">
+  <h2><span class="step">1</span>はじめかた</h2>
+  <h3>ブラウザで開く</h3>
+  <p>公開ページをそのまま開けば使えます。インストールは不要です。</p>
+  <pre><code>https://k-saito0000.github.io/OutLiner/</code></pre>
+  <h3>手元のファイルから使う場合</h3>
+  <p>リポジトリを取得して、フォルダ内でローカルサーバーを立ち上げてください。</p>
+  <pre><code>python3 -m http.server 8784</code></pre>
+  <p>起動したら <code>http://localhost:8784/</code> を開きます。</p>
+  <div class="warn">
+    <b>写真モードを使うときは注意</b><br>
+    AI切り抜きのモデルを読み込む都合上、写真モードは <code>http://</code> または <code>https://</code> で開いた場合のみ動作します。<code>outliner.html</code> をダブルクリックして開いた（<code>file://</code>）状態では、透過PNGモードだけが使えます。
+  </div>
+  <h3>入力タイプを選ぶ</h3>
+  <p>画面上部のトグルで、読み込む画像の種類を選びます。</p>
+  <table>
+    <tr><th>選択</th><th>こんなときに</th><th>対応形式</th></tr>
+    <tr><td>透過PNG</td><td>すでに背景が透明になっている画像（イラスト、書き出し済みのロゴなど）</td><td>PNG</td></tr>
+    <tr><td>写真・画像（AI切り抜き）</td><td>背景が写り込んでいる写真や画像</td><td>PNG / JPEG / WebP</td></tr>
+  </table>
+</div>
+
+<div class="panel" id="png">
+  <h2><span class="step">2</span>透過PNGモード</h2>
+  <p class="lead">透明部分を手がかりにオブジェクトを自動で見つけて切り出します。</p>
+  <ol>
+    <li>「透過PNG」を選んで、PNGをドラッグ＆ドロップします。</li>
+    <li>プレビュー左側に、見つかったオブジェクトが番号付きの枠で表示されます。</li>
+    <li>切り出したくないオブジェクトは<b>クリックで選択を外せます</b>（枠が破線・グレーになります）。</li>
+    <li>右側の「切り出しモード」で、まとめて1枚にするか、オブジェクトごとに分けるかを選びます。</li>
+  </ol>
+  <h3>切り出しモード</h3>
+  <table>
+    <tr><th>モード</th><th>動作</th></tr>
+    <tr><td>全体トリミング</td><td>選択中のオブジェクトすべてを含む最小の四角形で、1枚に切り出します。</td></tr>
+    <tr><td>個別切り出し</td><td>オブジェクトごとに別ファイルとして切り出します。四角形の中に他のオブジェクトが重なっていても、その部分は透明にして混入を防ぎます。</td></tr>
+  </table>
+  <div class="note">
+    <b>うっすら残るゴミが混ざるとき</b>は「アルファ閾値」を少し上げてください。半透明のノイズを背景として無視するようになります。
+  </div>
+</div>
+
+<div class="panel" id="photo">
+  <h2><span class="step">3</span>写真モード（AI切り抜き）</h2>
+  <p class="lead">写真から被写体をAIが自動で切り抜きます。うまくいかなかったところは、あとから手で直せます。</p>
+  <ol>
+    <li>「写真・画像（AI切り抜き）」を選んで、写真をドラッグ＆ドロップします。</li>
+    <li>初回だけモデルの読み込みで少し待ちます（2回目以降はブラウザにキャッシュされます）。</li>
+    <li>切り抜き結果が表示されます。<b>赤くなっている部分が切り落とされる背景</b>です。</li>
+    <li>必要に応じて調整し、「減色へ進む」または「減色をスキップして切り出しへ」を押します。</li>
+  </ol>
+
+  <h3>マスク閾値</h3>
+  <p>残す範囲の広さを調整します。下げると広く残り、上げると狭くなります。動かしても推論はやり直さないので、すぐに結果が変わります。</p>
+
+  <h3>ブラシで手直し</h3>
+  <table>
+    <tr><th>ツール</th><th>動作</th></tr>
+    <tr><td>けす</td><td>なぞったところを背景（切り落とす側）にします。</td></tr>
+    <tr><td>たす</td><td>なぞったところを残す側にします。</td></tr>
+  </table>
+  <p>塗りは<b>なぞり終わったときに反映</b>されます。なぞっている間は、けす＝赤・たす＝緑の円で範囲が表示されます。</p>
+  <div class="note">
+    <b>にた色モード</b>（既定ON）をONにしておくと、なぞった場所の近くにある似た色の範囲まで自動で切り替わります。背景をざっくりなぞるだけで一気に消せるので、細かくなぞる手間が減ります。<br>
+    輪郭ぎりぎりを慎重に直したいときはOFFにしてください。なぞった円の中だけが変わります。
+  </div>
+  <p>やり直したいときは「元に戻す」「やり直す」を使ってください（20回分まで戻せます）。AIの結果からやり直したいときは「AI切り抜きをやり直す」を押します。</p>
+</div>
+
+<div class="panel" id="quant">
+  <h2><span class="step">4</span>減色と色の調整</h2>
+  <p class="lead">写真の色数を減らして、UVプリントのインキ層分けやレーザー彫刻の段階分けに使いやすくします。減色が不要ならスキップできます。</p>
+
+  <h3>色数</h3>
+  <p>2〜8色から選びます（既定4色）。「減色しない」を選べば元の色のままにできます。</p>
+
+  <h3>範囲を指定して、その部分だけ色の扱いを変える</h3>
+  <p>顔まわりだけ元の色で残したい、模様だけ1色にまとめたい、といった調整ができます。まず<b>範囲の指定方法</b>を選び、次に<b>その範囲の色をどう扱うか</b>を選んでから、プレビュー上で指定します。</p>
+  <table>
+    <tr><th>範囲の指定方法</th><th>動作</th></tr>
+    <tr><td>クリック</td><td>クリックした場所から、似た色の範囲を自動で選びます。目や鼻などのピンポイント指定に。</td></tr>
+    <tr><td>ブラシ</td><td>なぞって範囲を選びます。広い範囲や複数の場所をまとめて指定できます。「にた色まで広げる」をONにすると、なぞった色に似た周囲まで自動で含めます。</td></tr>
+  </table>
+  <table>
+    <tr><th>指定した範囲の色</th><th>動作</th><th>使いどころ</th></tr>
+    <tr><td>元画像のまま</td><td>その範囲は減色せず、元画像の色をそのまま再現します。</td><td>顔まわりだけフルカラーで残したいとき</td></tr>
+    <tr><td>この範囲だけ細かく減色</td><td>その範囲だけ多め（6〜32色）の色数で減色します。1色にはまとめないので、毛並みや陰影の質感が残ります。</td><td>質感は残しつつ、色は整理したいとき</td></tr>
+    <tr><td>単色にする</td><td>その範囲を代表色1色で塗ります。</td><td>目や模様を1色として扱いたいとき</td></tr>
+  </table>
+
+  <h3>パレットの操作</h3>
+  <ul>
+    <li><b>色を差し替える</b>: 各行のスウォッチ（色見本）をクリックして好きな色に変更できます。</li>
+    <li><b>色をまとめる</b>: 行をクリックして2色以上選ぶと、「どの色にまとめますか？」が表示されます。まとめ先を選ぶと1色として扱われます。「まとめをぜんぶもどす」で解除できます。</li>
+    <li>各行の％は、その色が占める面積の割合です。インキの使用量や版の面積の目安になります。</li>
+    <li>「色調整をリセット」で、差し替え・まとめ・範囲指定をすべて初期状態に戻せます。</li>
+  </ul>
+  <div class="note">
+    <b>行ったり来たりできます。</b>「切り抜き」「減色」「切り出し」は自由に往復できます。切り出し画面の「← 切り抜きへ戻る」「← 減色へ戻る」から戻っても、マスクや色の設定は保持されます。
+  </div>
+</div>
+
+<div class="panel" id="cut">
+  <h2><span class="step">5</span>切り出しと書き出し</h2>
+
+  <h3>プレビューの見かた</h3>
+  <p>左が元画像（検出結果つき）、右が切り出し結果です。右側では<b>カラーPNG・白版PNG・輪郭SVGを重ねて確認</b>できます。</p>
+  <ul>
+    <li>チェックボックスで各レイヤーの表示／非表示を切り替えます。</li>
+    <li>スライダーで不透明度を変えられます（白版を半透明にすると、下のカラーとの重なり具合がわかります）。</li>
+    <li>▲▼で前後の重なり順を入れ替えられます（上の行ほど手前）。</li>
+  </ul>
+
+  <h3>調整パラメータ</h3>
+  <table>
+    <tr><th>項目</th><th>内容</th></tr>
+    <tr><td>アルファ閾値</td><td>どこまでを背景とみなすか。半透明のゴミを消したいときに上げます。</td></tr>
+    <tr><td>余白パディング</td><td>切り出しの周囲に残す余白（px）。</td></tr>
+    <tr><td>白版の収縮／拡張</td><td><b>プラス＝チョーク</b>（輪郭より小さく／印刷ズレで白がはみ出すのを防ぐ）、<b>マイナス＝スプレッド</b>（輪郭より大きく／下地の白をはみ出させる）。</td></tr>
+    <tr><td>輪郭のオフセット</td><td><b>プラス＝外側</b>（オブジェクトから離してカット）、<b>マイナス＝内側</b>（食い込ませてカット）。</td></tr>
+  </table>
+  <div class="note">
+    白版を拡張したり輪郭を外側にずらしたりすると、その分だけ<b>切り出し範囲が自動的に広がります</b>（3つの出力すべてで同じだけ広がります）。はみ出して欠けることはなく、重ね合わせのズレも起きません。
+  </div>
+
+  <h3>保存</h3>
+  <p>「出力タイプ」で書き出したいものを選び、各項目の「保存」を押します。複数ある場合は「すべてダウンロード」でまとめて保存できます。</p>
+</div>
+
+<div class="panel" id="tips">
+  <h2><span class="step">6</span>加工機に渡すときの注意</h2>
+  <h3>レーザーカッター（輪郭SVG）</h3>
+  <ul>
+    <li>SVGの座標は<b>px単位</b>です。LightBurnなどに読み込んだら、仕上がりの実寸に合わせて拡大・縮小してください。</li>
+    <li>線は赤（<code>#ff0000</code>）・塗りなしで書き出しています。機械側でカット線として設定してください。</li>
+    <li>穴のある形（ドーナツ型など）は、内側の輪郭も含まれます。</li>
+  </ul>
+  <h3>UVプリンター（白版PNG＋カラーPNG）</h3>
+  <ul>
+    <li>白版とカラーは同じキャンバスサイズなので、そのまま重ねて配置できます。</li>
+    <li>白がはみ出しやすい場合は「白版の収縮」をプラス側に少し振ってください（1〜3px程度から試すのが安全です）。</li>
+    <li>入稿データは<b>出力タイプごとに個別に保存</b>してください。プレビューのレイヤー合成は確認用で、合成した画像は書き出されません。</li>
+  </ul>
+  <h3>その他</h3>
+  <ul>
+    <li>写真モードの作業解像度は長辺1000pxです。それより大きい写真は縮小されます。</li>
+    <li>一度に処理できるのは1枚です。複数ファイルの一括処理には対応していません。</li>
+  </ul>
+</div>
+
+<footer>
+  OutLiner — 画像はすべてブラウザ内で処理され、外部に送信されません。<br>
+  <a href="outliner.html">アプリを開く</a> ・ <a href="https://github.com/K-Saito0000/OutLiner">GitHub リポジトリ</a>
+</footer>
+
+</body>
+</html>

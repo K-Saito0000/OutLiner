@@ -181,6 +181,9 @@ PNG読み込み（D&D / ファイル選択）
 | `vendor/ort.wasm.min.js` | ONNX Runtime Web 1.14（写真モード用・162KB） |
 | `vendor/ort-wasm-simd.wasm` | ort WASMバイナリ（写真モード用・9.5MB） |
 | `vendor/u2netp.onnx` | セグメンテーションモデル（写真モード用・4.4MB） |
+| `how-to-use.html` | 利用者向けの使い方ページ（アプリのヘッダーからリンク） |
+| `ogp.png` | OGP画像（1200×630）。`ogp-source.html` から生成 |
+| `ogp-source.html` | OGP画像の生成元HTML（ヘッドレスChromeでスクリーンショット） |
 | `README.md` | 利用者向けの使い方 |
 | `SPEC.md` | 本仕様書 |
 

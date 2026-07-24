@@ -6,6 +6,8 @@
 - **透過PNG**: アルファチャンネル付きPNGの透明部分を検出して切り出し
 - **写真・画像（AI切り抜き）**: 写真からAIが被写体を自動で切り抜き（ブラシ手修正・減色つき）→ そのまま加工データ化
 
+**使い方ガイド**: [how-to-use.html](how-to-use.html)（公開版: https://k-saito0000.github.io/OutLiner/how-to-use.html ）
+
 ## How to use
 
 1. このリポジトリをクローンまたはZIPでダウンロードする

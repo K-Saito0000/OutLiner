@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 1200px; height: 630px; overflow: hidden; }
+  .card {
+    width: 1200px; height: 630px;
+    background: #eef2f8;
+    font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
+    color: #273444;
+    padding: 62px 70px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+  }
+  .brand { display: flex; align-items: center; gap: 22px; }
+  .logo {
+    width: 92px; height: 92px;
+    border-radius: 22px;
+    border: 2px solid #dfe6ef;
+    background: #fff;
+    padding: 10px;
+    box-shadow: 0 4px 18px rgba(50,70,120,.09);
+  }
+  h1 { font-size: 76px; font-weight: 800; letter-spacing: .01em; line-height: 1; }
+  h1 span { color: #3b82f6; }
+  .tag { font-size: 25px; color: #8492a6; margin-top: 12px; font-weight: 600; }
+  .lead { font-size: 33px; font-weight: 700; line-height: 1.5; }
+  .lead em { font-style: normal; color: #2563eb; }
+  .chips { display: flex; gap: 14px; }
+  .chip {
+    background: #fff;
+    border: 2px solid #dfe6ef;
+    border-radius: 999px;
+    padding: 13px 26px;
+    font-size: 23px;
+    font-weight: 700;
+  }
+  .chip.blue { border-color: #3b82f6; color: #2563eb; background: #eaf2fe; }
+  .chip.red { border-color: #ef4444; color: #dc2626; background: #fff1f1; }
+  .foot { font-size: 21px; color: #8492a6; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <rect width="64" height="64" rx="12" fill="#14161a"/>
+      <rect x="15" y="15" width="34" height="34" rx="5" fill="none" stroke="#4dd2ff" stroke-width="5" stroke-dasharray="10 6.4" stroke-linecap="round"/>
+      <circle cx="32" cy="32" r="7" fill="#ff4d4d"/>
+    </svg>
+    <div>
+      <h1>Out<span>Liner</span></h1>
+      <div class="tag">画像 → レーザー・UVプリント用データ</div>
+    </div>
+  </div>
+
+  <div class="lead">
+    写真から被写体を<em>AIで切り抜き</em>、<br>
+    <em>カットパスSVG</em>と<em>白版PNG</em>をそのまま書き出す。
+  </div>
+
+  <div class="chips">
+    <span class="chip red">輪郭SVG／レーザー</span>
+    <span class="chip blue">白版PNG／UVプリント</span>
+    <span class="chip">減色・色調整</span>
+  </div>
+
+  <div class="foot">ブラウザ内で完結・画像は外部に送信されません</div>
+</div>
+</body>
+</html>
